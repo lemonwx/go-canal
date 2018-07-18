@@ -94,12 +94,35 @@ func (dumper *Dumper) Start() error {
 		case mysql.OK_HEADER:
 			header := &EveHeader{}
 			header.Decode(pkt)
-			log.Debug(header.Dump())
+			//log.Debug(header.Dump(), pkt)
+
+			dumper.parseEvent(header, pkt[EventHeaderSize:])
 		}
 	}
 	return nil
 }
 
-func (Dumper *Dumper) parseEvent() (Event, error) {
+func (Dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) {
+	data = data[:len(data) - 4]
+	var eve Event
+	switch header.EveType {
+	case GTID_LOG_EVENT:
+		eve = &GtidEvent{header: header}
+	case QUERY_EVENT:
+		eve = &QueryEvent{header: header}
+	case TABLE_MAP_EVENT:
+		log.Debug("table map", data)
+	case WRITE_ROWS_EVENT_V2:
+		log.Debug("insert", data)
+	case XID_EVENT:
+		log.Debug("xid event", data)
+	default:
+		log.Debug(header.EveType)
+	}
+
+	if eve != nil {
+		eve.Decode(data)
+		log.Debug(eve.Dump())
+	}
 	return nil, nil
 }
