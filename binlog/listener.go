@@ -20,11 +20,12 @@ const (
 
 type Dumper struct {
 	*node.Node
+	tables map[uint64]*TableMapEvent
 }
 
 func NewBinlogDumper(host string, port int, user, password string) *Dumper {
 	node := node.NewNode(host, port, user, password, DEFAULT_SCHEMA, 0)
-	return &Dumper{node}
+	return &Dumper{node, make(map[uint64]*TableMapEvent, 0)}
 }
 
 func (dumper *Dumper) getFileAndPos() (string, uint32, error) {
@@ -102,7 +103,7 @@ func (dumper *Dumper) Start() error {
 	return nil
 }
 
-func (Dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) {
+func (dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) {
 	data = data[:len(data) - 4]
 	var eve Event
 	switch header.EveType {
@@ -111,8 +112,9 @@ func (Dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) 
 	case QUERY_EVENT:
 		eve = &QueryEvent{header: header}
 	case TABLE_MAP_EVENT:
-		log.Debug("table map", data)
+		eve = &TableMapEvent{header: header}
 	case WRITE_ROWS_EVENT_V2:
+		eve = &RowsEvent{header: header, dumper: dumper}
 		log.Debug("insert", data)
 	case XID_EVENT:
 		log.Debug("xid event", data)
@@ -124,5 +126,10 @@ func (Dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) 
 		eve.Decode(data)
 		log.Debug(eve.Dump())
 	}
+
+	if tbl, ok := eve.(*TableMapEvent); ok {
+		dumper.tables[tbl.tblId] = tbl
+	}
+
 	return nil, nil
 }
