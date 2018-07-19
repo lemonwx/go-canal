@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
+	"github.com/lemonwx/xsql/mysql"
 )
 
 
@@ -149,4 +150,53 @@ func (queryEve *QueryEvent) Decode(data []byte) error {
 
 func (queryEve *QueryEvent) Dump() string {
 	return fmt.Sprintf("schema: %s, query: %s", queryEve.schema, queryEve.query)
+}
+
+
+type TableMapEvent struct {
+	header *EveHeader
+
+	tblId uint64
+	schema []byte
+	table []byte
+	fieldSize uint64
+	colTypes []byte
+}
+
+func (tbl *TableMapEvent) Decode(data []byte) error {
+	tbl.tblId = readTblId(data)
+	pos := 6
+
+	_ = binary.LittleEndian.Uint16(data[pos:])
+	pos += 2
+
+	schemaLength := data[pos]
+	pos++
+
+	tbl.schema = data[pos : pos+int(schemaLength)]
+	pos += int(schemaLength)
+
+	//skip 0x00
+	pos++
+
+	tableLength := data[pos]
+	pos++
+
+	tbl.table = data[pos : pos+int(tableLength)]
+	pos += int(tableLength)
+
+	//skip 0x00
+	pos++
+
+	var n int
+	tbl.fieldSize, _, n = mysql.LengthEncodedInt(data[pos:])
+	pos += n
+
+	tbl.colTypes = data[pos : pos+int(tbl.fieldSize)]
+
+	return nil
+}
+
+func (tbl *TableMapEvent) Dump() string {
+	return fmt.Sprintf("table Id: %d, colType: %v", tbl.tblId, tbl.colTypes)
 }
