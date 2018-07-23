@@ -115,7 +115,8 @@ func (dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) 
 		eve = &TableMapEvent{header: header}
 	case WRITE_ROWS_EVENT_V2:
 		eve = &RowsEvent{header: header, dumper: dumper}
-		log.Debug("insert", data)
+	case DELETE_ROWS_EVENT_V2:
+		eve = &RowsEvent{header: header, dumper: dumper}
 	case XID_EVENT:
 		log.Debug("xid event", data)
 	default:

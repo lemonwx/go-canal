@@ -69,12 +69,10 @@ func (header *EveHeader) Dump() string {
 	)
 }
 
-
 type Event interface {
 	Decode(data []byte) error
 	Dump() string
 }
-
 
 type GtidEvent struct {
 	commitFlag bool
@@ -117,7 +115,6 @@ func (gtidEve *GtidEvent) Dump() string {
 	)
 }
 
-
 type QueryEvent struct {
 	schema string
 	query string
@@ -151,7 +148,6 @@ func (queryEve *QueryEvent) Decode(data []byte) error {
 func (queryEve *QueryEvent) Dump() string {
 	return fmt.Sprintf("schema: %s, query: %s", queryEve.schema, queryEve.query)
 }
-
 
 type TableMapEvent struct {
 	header *EveHeader
@@ -193,7 +189,9 @@ func (tbl *TableMapEvent) Decode(data []byte) error {
 	pos += n
 
 	tbl.colTypes = data[pos : pos+int(tbl.fieldSize)]
+	pos += int(tbl.fieldSize)
 
+	mysql.LengthEnodedString(data[pos:])
 	return nil
 }
 

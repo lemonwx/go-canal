@@ -65,20 +65,25 @@ func (re *RowsEvent) Dump() string {
 	switch re.header.EveType {
 	case WRITE_ROWS_EVENT_V2:
 		eveType = "WRITE_ROWS_EVENT_V2"
+	case DELETE_ROWS_EVENT_V2:
+		eveType = "DELETE_ROWS_EVENT_V2"
 	}
 
+	return fmt.Sprintf("%s table: %d, field_size: %d, rows: %v",
+		eveType, re.tblId, re.fieldSize,
+		re.DumpRows(),
+	)
+}
+
+func (re *RowsEvent) DumpRows () string {
 	rows := []string{}
 	for _, row := range re.rows {
 		for i := 0; i < len(row); i += 1 {
 			rows = append(rows,  fmt.Sprintf("@%d=%v", i, row[i]))
 		}
 	}
-	ret := fmt.Sprintf("%s table: %d, field_size: %d, rows: %v",
-		eveType, re.tblId, re.fieldSize,
-		strings.Join(rows, ", "),
-	)
 
-	return ret
+	return strings.Join(rows, ", ")
 }
 
 func readTblId(data []byte) uint64 {
@@ -144,8 +149,11 @@ func (re *RowsEvent) ReadRows(data []byte) {
 		}
 		re.rows = append(re.rows, row)
 	}
+}
 
-	log.Debug(re.rows)
+func (re *RowsEvent) RollBack() string {
+	rbSql := fmt.Sprintf("delete from %s where %s", re.dumper.tables[re.tblId].table, re.DumpRows())
+	return rbSql
 }
 
 func BigEndianUint24(data []uint8) uint64 {
@@ -158,4 +166,8 @@ func LittleEndianUint24(data []uint8) uint64 {
 	a, b, c := uint64(data[0]), uint64(data[1]), uint64(data[2])
 	res := a | (b << 8) | (c << 16)
 	return res
+}
+
+type UpdateRowsEvent struct {
+
 }
