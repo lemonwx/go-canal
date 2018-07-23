@@ -11,6 +11,8 @@ import (
 
 	"github.com/lemonwx/xsql/mysql"
 	"github.com/lemonwx/log"
+	"time"
+	"strings"
 )
 
 type RowsEvent struct {
@@ -59,7 +61,24 @@ func (re *RowsEvent) Decode(data []byte) error {
 }
 
 func (re *RowsEvent) Dump() string {
-	return fmt.Sprintf("table: %d, field_size: %d", re.tblId, re.fieldSize)
+	eveType := ""
+	switch re.header.EveType {
+	case WRITE_ROWS_EVENT_V2:
+		eveType = "WRITE_ROWS_EVENT_V2"
+	}
+
+	rows := []string{}
+	for _, row := range re.rows {
+		for i := 0; i < len(row); i += 1 {
+			rows = append(rows,  fmt.Sprintf("@%d=%v", i, row[i]))
+		}
+	}
+	ret := fmt.Sprintf("%s table: %d, field_size: %d, rows: %v",
+		eveType, re.tblId, re.fieldSize,
+		strings.Join(rows, ", "),
+	)
+
+	return ret
 }
 
 func readTblId(data []byte) uint64 {
@@ -72,39 +91,51 @@ func readTblId(data []byte) uint64 {
 func (re *RowsEvent) ReadRows(data []byte) {
 	fieldTypes := re.dumper.tables[re.tblId].colTypes
 	re.rows = make([]map[int]interface{}, 0)
-	pos := uint64(0)
+	pos := 0
 
-	for pos < uint64(len(data)) {
+	for pos < len(data) {
 		row := make(map[int]interface{})
-		nullMaskSize := ( re.fieldSize + 7 + 2 ) >> 3
+		nullMaskSize := int((BitCount(re.bitmap) + 7) >> 3)
 		nullMask := data[pos: pos+nullMaskSize]
 		pos += nullMaskSize
 
 		nullbitIndex := 0
-		for idx := uint64(0); idx < re.fieldSize; idx += 1 {
-			if isBitSet(re.bitmap, idx) {
+		for idx := 0; idx < int(re.fieldSize); idx += 1 {
+			if BitGet(re.bitmap, uint8(idx)) {
 				row[int(idx)] = nil
 			}
 
-			if (uint32(nullMask[nullbitIndex/8])>>uint32(nullbitIndex%8))&0x01 > 0 {
+			if (uint32(nullMask[nullbitIndex/8])>>uint32(nullbitIndex%8)) & 0x01 > 0 {
 				row[int(idx)] = nil
 			} else {
 				fieldType := fieldTypes[idx]
+				//log.Debug(fieldType)
 				switch  fieldType {
 				case mysql.MYSQL_TYPE_LONGLONG:
-					row[int(idx)] = data[pos: pos+8]
+					row[idx] = binary.LittleEndian.Uint64(data[pos: pos + 8])
 					pos += 8
 				case mysql.MYSQL_TYPE_LONG:
-					row[int(idx)] = data[pos: pos+4]
+					row[idx] = binary.LittleEndian.Uint32(data[pos: pos+4])
 					pos += 4
 				case mysql.MYSQL_TYPE_STRING:
-					var size int
-					row[int(idx)], _, size, _ = mysql.LengthEnodedString(data[pos:])
-					pos += uint64(size)
+					bin, _, size, _ := mysql.LengthEnodedString(data[pos:])
+					row[idx] = string(bin)
+					pos += size
 				case mysql.MYSQL_TYPE_TIMESTAMP2:
-					log.Debug(data[pos:])
-					row[int(idx)] = data[pos: pos + 7]
-					pos += 7
+					dateBinary := binary.BigEndian.Uint32(data[pos: pos + 4])
+					date := time.Unix(int64(dateBinary), 0).Format("2006-01-02 15:04:05")
+					pos = pos + 4
+					misSec := BigEndianUint24(data[pos:pos+3])
+					pos += 3
+					row[idx] = fmt.Sprintf("%s.%d", date, misSec)
+				case mysql.MYSQL_TYPE_DATE:
+					dateBin := LittleEndianUint24(data[pos: pos + 3])
+					if dateBin == 0 {
+						row[idx] = nil
+					} else {
+						row[idx] = fmt.Sprintf("%04d-%02d-%02d", dateBin/(16*32), dateBin/32%16, dateBin%32)
+					}
+					pos += 3
 				default:
 					log.Debug(fieldType)
 				}
@@ -117,6 +148,14 @@ func (re *RowsEvent) ReadRows(data []byte) {
 	log.Debug(re.rows)
 }
 
-func isBitSet(bitmap []byte, i uint64) bool {
-	return bitmap[i>>3]&(1<<(uint(i)&7)) > 0
+func BigEndianUint24(data []uint8) uint64 {
+	a, b, c := uint64(data[0]), uint64(data[1]), uint64(data[2])
+	res := (a << 16) | (b << 8) | c
+	return res
+}
+
+func LittleEndianUint24(data []uint8) uint64 {
+	a, b, c := uint64(data[0]), uint64(data[1]), uint64(data[2])
+	res := a | (b << 8) | (c << 16)
+	return res
 }
