@@ -74,6 +74,17 @@ func (dumper *Dumper) Init() error {
 		return errors.Trace(err)
 	}
 
+	_, err = dumper.Execute(mysql.COM_QUERY, []byte("show master status"))
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// 确定 dump 开始的文件和位置后, 全量同步一次 元数据
+	// 若在 show master status 之前元数据有变化, 则全量可以同步到
+	// 若在 show master statsu 之后元数据有变化, 则可以通过binlog 增量同步到
+	meta := NewInformationSchema(dumper)
+	meta.parseMeta()
+
 	if err = dumper.writeDumpCmd(); err != nil {
 		return errors.Trace(err)
 	}
@@ -130,6 +141,10 @@ func (dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) 
 
 	if tbl, ok := eve.(*TableMapEvent); ok {
 		dumper.tables[tbl.tblId] = tbl
+	}
+
+	if _, ok := eve.(*QueryEvent); ok {
+		// create / drop / alter should sync with meta
 	}
 
 	return nil, nil
