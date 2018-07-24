@@ -155,6 +155,7 @@ type TableMapEvent struct {
 	tblId uint64
 	schema []byte
 	table []byte
+	fullName string
 	fieldSize uint64
 	colTypes []byte
 }
@@ -181,6 +182,8 @@ func (tbl *TableMapEvent) Decode(data []byte) error {
 	tbl.table = data[pos : pos+int(tableLength)]
 	pos += int(tableLength)
 
+	tbl.fullName = fmt.Sprintf("%s.%s", tbl.schema, tbl.table)
+
 	//skip 0x00
 	pos++
 
@@ -192,6 +195,7 @@ func (tbl *TableMapEvent) Decode(data []byte) error {
 	pos += int(tbl.fieldSize)
 
 	mysql.LengthEnodedString(data[pos:])
+
 	return nil
 }
 
