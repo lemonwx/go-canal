@@ -20,12 +20,13 @@ const (
 
 type Dumper struct {
 	*node.Node
+	meta *InformationSchema
 	tables map[uint64]*TableMapEvent
 }
 
 func NewBinlogDumper(host string, port int, user, password string) *Dumper {
 	node := node.NewNode(host, port, user, password, DEFAULT_SCHEMA, 0)
-	return &Dumper{node, make(map[uint64]*TableMapEvent, 0)}
+	return &Dumper{Node: node, tables: map[uint64]*TableMapEvent{}}
 }
 
 func (dumper *Dumper) getFileAndPos() (string, uint32, error) {
@@ -83,7 +84,8 @@ func (dumper *Dumper) Init() error {
 	// 若在 show master status 之前元数据有变化, 则全量可以同步到
 	// 若在 show master statsu 之后元数据有变化, 则可以通过binlog 增量同步到
 	meta := NewInformationSchema(dumper)
-	meta.parseMeta()
+	meta.parseMeta("", "")
+	dumper.meta = meta
 
 	if err = dumper.writeDumpCmd(); err != nil {
 		return errors.Trace(err)
@@ -124,9 +126,7 @@ func (dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) 
 		eve = &QueryEvent{header: header}
 	case TABLE_MAP_EVENT:
 		eve = &TableMapEvent{header: header}
-	case WRITE_ROWS_EVENT_V2:
-		eve = &RowsEvent{header: header, dumper: dumper}
-	case DELETE_ROWS_EVENT_V2:
+	case WRITE_ROWS_EVENT_V2, DELETE_ROWS_EVENT_V2:
 		eve = &RowsEvent{header: header, dumper: dumper}
 	case XID_EVENT:
 		log.Debug("xid event", data)
@@ -141,6 +141,13 @@ func (dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) 
 
 	if tbl, ok := eve.(*TableMapEvent); ok {
 		dumper.tables[tbl.tblId] = tbl
+		dumper.syncBinlogAndIfSchema(tbl)
+		//log.Debug(dumper.meta.tbs[tbl.fullName])
+	}
+
+	if re, ok := eve.(*RowsEvent); ok {
+		table := dumper.meta.tbs[re.table.fullName]
+		log.Debug(re.RollBack(table.fields))
 	}
 
 	if _, ok := eve.(*QueryEvent); ok {
@@ -148,4 +155,8 @@ func (dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) 
 	}
 
 	return nil, nil
+}
+
+func (dumper *Dumper) syncBinlogAndIfSchema(tbl *TableMapEvent) {
+
 }
