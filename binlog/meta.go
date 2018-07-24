@@ -9,17 +9,17 @@ import (
 	"fmt"
 
 	"github.com/juju/errors"
-	"github.com/lemonwx/xsql/mysql"
 	"github.com/lemonwx/log"
+	"github.com/lemonwx/xsql/mysql"
 	"strings"
 )
 
 type Field struct {
-	fieldName string
-	fieldType string
+	fieldName        string
+	fieldType        string
 	encodedfieldType uint8
-	unsigned bool
-	encoded []uint8
+	unsigned         bool
+	encoded          []uint8
 }
 
 func (f Field) String() string {
@@ -40,14 +40,14 @@ func (f *Field) Decode() {
 }
 
 type Table struct {
-	schema string `json:"schema"`
-	table string	`json:"table"`
-	tableId uint64	`json:"tableId"`
-	fields []*Field	`json:"fields"`
+	schema   string   `json:"schema"`
+	table    string   `json:"table"`
+	tableId  uint64   `json:"tableId"`
+	fields   []*Field `json:"fields"`
 	complete bool
 }
 
-func (table *Table) setupEncodedFieldType (types []byte) error {
+func (table *Table) setupEncodedFieldType(types []byte) error {
 	if len(table.fields) != len(types) {
 		return errors.New("len(table.fields) != len(types)")
 	}
@@ -59,18 +59,18 @@ func (table *Table) setupEncodedFieldType (types []byte) error {
 }
 
 type InformationSchema struct {
-	tbs map[string]*Table
+	tbs    map[string]*Table
 	dumper *Dumper
 }
 
-func NewInformationSchema(dumper *Dumper) *InformationSchema{
+func NewInformationSchema(dumper *Dumper) *InformationSchema {
 	return &InformationSchema{
-		tbs : make(map[string]*Table),
+		tbs:    make(map[string]*Table),
 		dumper: dumper,
 	}
 }
 
-func (meta *InformationSchema) GetTable(tbName string)(*Table, bool) {
+func (meta *InformationSchema) GetTable(tbName string) (*Table, bool) {
 	table, ok := meta.tbs[tbName]
 	return table, ok
 }
@@ -89,7 +89,7 @@ func (meta *InformationSchema) parseMeta(schema, table string) error {
 	if len(table) != 0 {
 		sql += fmt.Sprintf(" and TABLE_NAME = %s", table)
 	}
-	ret, err :=meta.dumper.Execute(mysql.COM_QUERY, []byte(sql))
+	ret, err := meta.dumper.Execute(mysql.COM_QUERY, []byte(sql))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -109,8 +109,8 @@ func (meta *InformationSchema) parseMeta(schema, table string) error {
 		} else {
 			tb := &Table{
 				schema: string(schema),
-				table: string(table),
-				fields:[]*Field{field},
+				table:  string(table),
+				fields: []*Field{field},
 			}
 
 			meta.tbs[fullTbName] = tb
@@ -124,4 +124,3 @@ func (meta *InformationSchema) parseMeta(schema, table string) error {
 	//log.Debug(meta)
 	return nil
 }
-

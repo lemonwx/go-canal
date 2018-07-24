@@ -20,7 +20,7 @@ const (
 
 type Dumper struct {
 	*node.Node
-	meta *InformationSchema
+	meta   *InformationSchema
 	tables map[uint64]*TableMapEvent
 }
 
@@ -117,7 +117,7 @@ func (dumper *Dumper) Start() error {
 }
 
 func (dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) {
-	data = data[:len(data) - 4]
+	data = data[:len(data)-4]
 	var eve Event
 	switch header.EveType {
 	case GTID_LOG_EVENT:

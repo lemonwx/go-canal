@@ -14,7 +14,6 @@ import (
 	"github.com/lemonwx/xsql/mysql"
 )
 
-
 type EveHeader struct {
 	Ts      uint32
 	EveType uint8
@@ -117,7 +116,7 @@ func (gtidEve *GtidEvent) Dump() string {
 
 type QueryEvent struct {
 	schema string
-	query string
+	query  string
 
 	header *EveHeader
 	encode []byte
@@ -130,16 +129,16 @@ func (queryEve *QueryEvent) Decode(data []byte) error {
 	schemaLen := data[pos]
 	pos += 1
 	pos += 2
-	statusLen := binary.LittleEndian.Uint16(data[pos :pos + 2])
+	statusLen := binary.LittleEndian.Uint16(data[pos : pos+2])
 	pos += 2
 
 	pos += int(statusLen)
-	queryEve.schema = string(data[pos : pos + int(schemaLen)])
+	queryEve.schema = string(data[pos : pos+int(schemaLen)])
 	pos += int(schemaLen)
 	pos += 1
 
 	//queryLen := queryEve.header.EveSize - EventHeaderSize - 13 - uint32(statusLen) - uint32(schemaLen)
-	queryEve.query = string(data[pos : ])
+	queryEve.query = string(data[pos:])
 	queryEve.encode = data
 
 	return nil
@@ -152,12 +151,12 @@ func (queryEve *QueryEvent) Dump() string {
 type TableMapEvent struct {
 	header *EveHeader
 
-	tblId uint64
-	schema []byte
-	table []byte
-	fullName string
+	tblId     uint64
+	schema    []byte
+	table     []byte
+	fullName  string
 	fieldSize uint64
-	colTypes []byte
+	colTypes  []byte
 }
 
 func (tbl *TableMapEvent) Decode(data []byte) error {

@@ -14,15 +14,14 @@ import (
 )
 
 const (
-	 host string = "172.17.0.2"
-	 port int = 5518
-	 user string = "root"
-	 password string = "root"
+	host     string = "172.17.0.2"
+	port     int    = 5518
+	user     string = "root"
+	password string = "root"
 
-	 svrHost = "localhost"
-	 svrPort = 1236
+	svrHost = "localhost"
+	svrPort = 1236
 )
-
 
 func main() {
 	// binlog listener start
