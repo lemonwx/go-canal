@@ -147,7 +147,14 @@ func (dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) 
 
 	if re, ok := eve.(*RowsEvent); ok {
 		table := dumper.meta.tbs[re.table.fullName]
-		log.Debug(re.RollBack(table.fields))
+		if rbSqls, err := re.RollBack(table.fields); err != nil {
+			log.Errorf("re: %v rollback failed: %v", re, err)
+		} else {
+			log.Debug("ROLLBACK: ")
+			for _, sql := range rbSqls {
+				log.Debug(sql)
+			}
+		}
 	}
 
 	if _, ok := eve.(*QueryEvent); ok {

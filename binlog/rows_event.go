@@ -8,11 +8,12 @@ package binlog
 import (
 	"fmt"
 	"encoding/binary"
+	"time"
+	"strings"
 
 	"github.com/lemonwx/xsql/mysql"
 	"github.com/lemonwx/log"
-	"time"
-	"strings"
+	"github.com/juju/errors"
 )
 
 type RowsEvent struct {
@@ -31,6 +32,7 @@ type RowsEvent struct {
 	rows []map[int]interface{}
 
 	dumper *Dumper
+	table *TableMapEvent
 }
 
 func (re *RowsEvent) Decode(data []byte) error {
@@ -54,6 +56,7 @@ func (re *RowsEvent) Decode(data []byte) error {
 	size = int((re.fieldSize + 7) / 8)
 	re.bitmap = data[pos: pos + size]
 	pos += size
+	re.table = re.dumper.tables[re.tblId]
 
 	re.ReadRows(data[pos:])
 
@@ -79,7 +82,7 @@ func (re *RowsEvent) DumpRows () string {
 	rows := []string{}
 	for _, row := range re.rows {
 		for i := 0; i < len(row); i += 1 {
-			rows = append(rows,  fmt.Sprintf("@%d=%v", i, row[i]))
+			rows = append(rows, fmt.Sprintf("@%d=%v", i, row[i]))
 		}
 	}
 
@@ -94,7 +97,7 @@ func readTblId(data []byte) uint64 {
 }
 
 func (re *RowsEvent) ReadRows(data []byte) {
-	fieldTypes := re.dumper.tables[re.tblId].colTypes
+	fieldTypes := re.table.colTypes
 	re.rows = make([]map[int]interface{}, 0)
 	pos := 0
 
@@ -151,9 +154,53 @@ func (re *RowsEvent) ReadRows(data []byte) {
 	}
 }
 
-func (re *RowsEvent) RollBack() string {
-	rbSql := fmt.Sprintf("delete from %s where %s", re.dumper.tables[re.tblId].table, re.DumpRows())
-	return rbSql
+func (re *RowsEvent) rollbackForIst(fields []*Field) ([]string, error) {
+	rbTrxSqls := []string{}
+	for _, row := range re.rows {
+		wheres := []string{}
+		for idx, fieldVal := range row {
+			wheres = append(wheres, fmt.Sprintf("%s=%v", fields[idx].fieldName, fieldVal))
+		}
+		rbSql := fmt.Sprintf("delete from %s %s", re.table.fullName, strings.Join(wheres, ", "))
+		rbTrxSqls = append(rbTrxSqls, rbSql)
+	}
+	return rbTrxSqls, nil
+}
+
+func (re *RowsEvent) rollbackForDel(fields []*Field) ([]string, error) {
+	rbTrxSqls := []string{}
+	for _, row := range re.rows {
+		values := []string{}
+		fieldNames := []string{}
+		for idx, fieldVal := range row {
+			values = append(values, fmt.Sprintf("%v", fieldVal))
+			fieldNames = append(fieldNames, fields[idx].fieldName)
+
+		}
+		rbSql := fmt.Sprintf("insert into %s (%s) values (%s)", re.table.fullName,
+			strings.Join(fieldNames, ", "),
+			strings.Join(values, ", "))
+		rbTrxSqls = append(rbTrxSqls, rbSql)
+	}
+	return rbTrxSqls, nil
+}
+
+func (re *RowsEvent) rollbackForUpdate() ([]string, error) {
+	return nil, nil
+}
+
+func (re *RowsEvent) RollBack(fields []*Field) ([]string, error) {
+	if uint64(len(fields)) != re.fieldSize {
+		return nil, errors.New("params fields size must equal event.FieldSize")
+	}
+	switch re.header.EveType {
+	case WRITE_ROWS_EVENT_V2:
+		return re.rollbackForIst(fields)
+	case DELETE_ROWS_EVENT_V2:
+		return re.rollbackForDel(fields)
+	default:
+		return nil, errors.New("UNSUPPORTED ROLLBACK BINLOG EVENT")
+	}
 }
 
 func BigEndianUint24(data []uint8) uint64 {
