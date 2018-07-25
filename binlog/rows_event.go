@@ -14,6 +14,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/lemonwx/log"
 	"github.com/lemonwx/xsql/mysql"
+	"bytes"
 )
 
 type RowsEvent struct {
@@ -79,14 +80,26 @@ func (re *RowsEvent) Dump() string {
 }
 
 func (re *RowsEvent) DumpRows() string {
-	rows := []string{}
-	for _, row := range re.rows {
-		for i := 0; i < len(row); i += 1 {
-			rows = append(rows, fmt.Sprintf("@%d=%v", i, row[i]))
+	buf := bytes.NewBuffer(make([]byte, 0, 128))
+	switch  re.header.EveType {
+	case WRITE_ROWS_EVENT_V2, DELETE_ROWS_EVENT_V2:
+		for _, row := range re.rows {
+			fmt.Fprintf(buf, "[ ")
+			for i := 0; i < len(row); i += 1 {
+				if i == len(row) - 1 {
+					fmt.Fprintf(buf, "@%d=%v", i, row[i])
+				} else {
+					fmt.Fprintf(buf, "@%d=%v, ", i, row[i])
+				}
+			}
+			fmt.Fprintf(buf, " ]")
 		}
+	case UPDATE_ROWS_EVENT_V2:
+	default:
+		
 	}
 
-	return strings.Join(rows, ", ")
+	return buf.String()
 }
 
 func readTblId(data []byte) uint64 {
