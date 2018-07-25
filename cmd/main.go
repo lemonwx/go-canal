@@ -28,7 +28,7 @@ func main() {
 	// server start
 	log.NewDefaultLogger(os.Stdout)
 	log.SetLevel(100)
-	dumper := binlog.NewBinlogDumper(host, port, user, password)
+	dumper := binlog.NewBinlogListener(host, port, user, password)
 	if err := dumper.Init(); err != nil {
 		log.Error(err)
 	}

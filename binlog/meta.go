@@ -60,10 +60,10 @@ func (table *Table) setupEncodedFieldType(types []byte) error {
 
 type InformationSchema struct {
 	tbs    map[string]*Table
-	dumper *Dumper
+	dumper *Listener
 }
 
-func NewInformationSchema(dumper *Dumper) *InformationSchema {
+func NewInformationSchema(dumper *Listener) *InformationSchema {
 	return &InformationSchema{
 		tbs:    make(map[string]*Table),
 		dumper: dumper,

@@ -9,35 +9,35 @@ import (
 	"encoding/binary"
 
 	"github.com/juju/errors"
+	"github.com/lemonwx/go-canal/event"
 	"github.com/lemonwx/log"
 	"github.com/lemonwx/xsql/mysql"
 	"github.com/lemonwx/xsql/node"
-	"github.com/lemonwx/go-canal/event"
 )
 
 const (
 	DEFAULT_SCHEMA = "information_schema"
 )
 
-type Dumper struct {
+type Listener struct {
 	*node.Node
-	meta   *InformationSchema
-	tables map[uint64]*event.TableMapEvent
+	meta      *InformationSchema
+	tables    map[uint64]*event.TableMapEvent
 	curTblEve *event.TableMapEvent
 }
 
-func NewBinlogDumper(host string, port int, user, password string) *Dumper {
+func NewBinlogListener(host string, port int, user, password string) *Listener {
 	node := node.NewNode(host, port, user, password, DEFAULT_SCHEMA, 0)
-	return &Dumper{Node: node, tables: map[uint64]*event.TableMapEvent{}}
+	return &Listener{Node: node, tables: map[uint64]*event.TableMapEvent{}}
 }
 
-func (dumper *Dumper) getFileAndPos() (string, uint32, error) {
+func (listener *Listener) getFileAndPos() (string, uint32, error) {
 	return "mysql-bin.000001", 4, nil
 }
 
-func (dumper *Dumper) writeDumpCmd() error {
+func (listener *Listener) writeDumpCmd() error {
 
-	logName, logPos, err := dumper.getFileAndPos()
+	logName, logPos, err := listener.getFileAndPos()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -59,25 +59,25 @@ func (dumper *Dumper) writeDumpCmd() error {
 
 	copy(data[pos:], logName)
 
-	dumper.SetPktSeq(0)
-	dumper.WritePacket(data)
+	listener.SetPktSeq(0)
+	listener.WritePacket(data)
 
 	return nil
 }
 
-func (dumper *Dumper) Init() error {
+func (listener *Listener) Init() error {
 
-	err := dumper.Connect()
+	err := listener.Connect()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	_, err = dumper.Execute(mysql.COM_QUERY, []byte("set @master_binlog_checksum= @@global.binlog_checksum"))
+	_, err = listener.Execute(mysql.COM_QUERY, []byte("set @master_binlog_checksum= @@global.binlog_checksum"))
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	_, err = dumper.Execute(mysql.COM_QUERY, []byte("show master status"))
+	_, err = listener.Execute(mysql.COM_QUERY, []byte("show master status"))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -85,20 +85,20 @@ func (dumper *Dumper) Init() error {
 	// 确定 dump 开始的文件和位置后, 全量同步一次 元数据
 	// 若在 show master status 之前元数据有变化, 则全量可以同步到
 	// 若在 show master statsu 之后元数据有变化, 则可以通过binlog 增量同步到
-	meta := NewInformationSchema(dumper)
+	meta := NewInformationSchema(listener)
 	meta.parseMeta("", "")
-	dumper.meta = meta
+	listener.meta = meta
 
-	if err = dumper.writeDumpCmd(); err != nil {
+	if err = listener.writeDumpCmd(); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
-func (dumper *Dumper) Start() error {
+func (listener *Listener) Start() error {
 
 	for {
-		pkt, err := dumper.ReadPacket()
+		pkt, err := listener.ReadPacket()
 		if err != nil {
 			return errors.Trace(err)
 			break
@@ -112,13 +112,13 @@ func (dumper *Dumper) Start() error {
 			header.Decode(pkt)
 			//log.Debug(header.Dump(), pkt)
 
-			dumper.parseEvent(header, pkt[event.EventHeaderSize:])
+			listener.parseEvent(header, pkt[event.EventHeaderSize:])
 		}
 	}
 	return nil
 }
 
-func (dumper *Dumper) parseEvent(header *event.EveHeader, data []byte) (event.Event, error) {
+func (listener *Listener) parseEvent(header *event.EveHeader, data []byte) (event.Event, error) {
 	data = data[:len(data)-4]
 	var eve event.Event
 	switch header.EveType {
@@ -129,8 +129,8 @@ func (dumper *Dumper) parseEvent(header *event.EveHeader, data []byte) (event.Ev
 	case event.TABLE_MAP_EVENT:
 		eve = &event.TableMapEvent{Header: header}
 	case event.WRITE_ROWS_EVENT_V2, event.DELETE_ROWS_EVENT_V2:
-		log.Debug(dumper.curTblEve)
-		eve = &event.RowsEvent{Header: header, Table: dumper.curTblEve}
+		log.Debug(listener.curTblEve)
+		eve = &event.RowsEvent{Header: header, Table: listener.curTblEve}
 	case event.XID_EVENT:
 		log.Debug("xid event", data)
 	default:
@@ -143,13 +143,13 @@ func (dumper *Dumper) parseEvent(header *event.EveHeader, data []byte) (event.Ev
 	}
 
 	if tbl, ok := eve.(*event.TableMapEvent); ok {
-		dumper.tables[tbl.TblId] = tbl
-		dumper.syncBinlogAndIfSchema(tbl)
-		dumper.curTblEve = tbl
+		listener.tables[tbl.TblId] = tbl
+		listener.syncBinlogAndIfSchema(tbl)
+		listener.curTblEve = tbl
 	}
 
 	if re, ok := eve.(*event.RowsEvent); ok {
-		table := dumper.meta.tbs[re.Table.FullName]
+		table := listener.meta.tbs[re.Table.FullName]
 		fieldNames := make([]string, 0, len(table.fields))
 
 		for _, field := range table.fields {
@@ -173,6 +173,6 @@ func (dumper *Dumper) parseEvent(header *event.EveHeader, data []byte) (event.Ev
 	return nil, nil
 }
 
-func (dumper *Dumper) syncBinlogAndIfSchema(tbl *event.TableMapEvent) {
+func (listener *Listener) syncBinlogAndIfSchema(tbl *event.TableMapEvent) {
 
 }
