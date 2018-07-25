@@ -12,6 +12,7 @@ import (
 	"github.com/lemonwx/log"
 	"github.com/lemonwx/xsql/mysql"
 	"github.com/lemonwx/xsql/node"
+	"github.com/lemonwx/go-canal/event"
 )
 
 const (
@@ -21,12 +22,13 @@ const (
 type Dumper struct {
 	*node.Node
 	meta   *InformationSchema
-	tables map[uint64]*TableMapEvent
+	tables map[uint64]*event.TableMapEvent
+	curTblEve *event.TableMapEvent
 }
 
 func NewBinlogDumper(host string, port int, user, password string) *Dumper {
 	node := node.NewNode(host, port, user, password, DEFAULT_SCHEMA, 0)
-	return &Dumper{Node: node, tables: map[uint64]*TableMapEvent{}}
+	return &Dumper{Node: node, tables: map[uint64]*event.TableMapEvent{}}
 }
 
 func (dumper *Dumper) getFileAndPos() (string, uint32, error) {
@@ -106,29 +108,30 @@ func (dumper *Dumper) Start() error {
 		case mysql.ERR_HEADER:
 			log.Debug(pkt[1:])
 		case mysql.OK_HEADER:
-			header := &EveHeader{}
+			header := &event.EveHeader{}
 			header.Decode(pkt)
 			//log.Debug(header.Dump(), pkt)
 
-			dumper.parseEvent(header, pkt[EventHeaderSize:])
+			dumper.parseEvent(header, pkt[event.EventHeaderSize:])
 		}
 	}
 	return nil
 }
 
-func (dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) {
+func (dumper *Dumper) parseEvent(header *event.EveHeader, data []byte) (event.Event, error) {
 	data = data[:len(data)-4]
-	var eve Event
+	var eve event.Event
 	switch header.EveType {
-	case GTID_LOG_EVENT:
-		eve = &GtidEvent{header: header}
-	case QUERY_EVENT:
-		eve = &QueryEvent{header: header}
-	case TABLE_MAP_EVENT:
-		eve = &TableMapEvent{header: header}
-	case WRITE_ROWS_EVENT_V2, DELETE_ROWS_EVENT_V2:
-		eve = &RowsEvent{header: header, dumper: dumper}
-	case XID_EVENT:
+	case event.GTID_LOG_EVENT:
+		eve = &event.GtidEvent{Header: header}
+	case event.QUERY_EVENT:
+		eve = &event.QueryEvent{Header: header}
+	case event.TABLE_MAP_EVENT:
+		eve = &event.TableMapEvent{Header: header}
+	case event.WRITE_ROWS_EVENT_V2, event.DELETE_ROWS_EVENT_V2:
+		log.Debug(dumper.curTblEve)
+		eve = &event.RowsEvent{Header: header, Table: dumper.curTblEve}
+	case event.XID_EVENT:
 		log.Debug("xid event", data)
 	default:
 		log.Debug(header.EveType)
@@ -139,15 +142,21 @@ func (dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) 
 		log.Debug(eve.Dump())
 	}
 
-	if tbl, ok := eve.(*TableMapEvent); ok {
-		dumper.tables[tbl.tblId] = tbl
+	if tbl, ok := eve.(*event.TableMapEvent); ok {
+		dumper.tables[tbl.TblId] = tbl
 		dumper.syncBinlogAndIfSchema(tbl)
-		//log.Debug(dumper.meta.tbs[tbl.fullName])
+		dumper.curTblEve = tbl
 	}
 
-	if re, ok := eve.(*RowsEvent); ok {
-		table := dumper.meta.tbs[re.table.fullName]
-		if rbSqls, err := re.RollBack(table.fields); err != nil {
+	if re, ok := eve.(*event.RowsEvent); ok {
+		table := dumper.meta.tbs[re.Table.FullName]
+		fieldNames := make([]string, 0, len(table.fields))
+
+		for _, field := range table.fields {
+			fieldNames = append(fieldNames, field.fieldName)
+		}
+
+		if rbSqls, err := re.RollBack(fieldNames); err != nil {
 			log.Errorf("re: %v rollback failed: %v", re, err)
 		} else {
 			log.Debug("ROLLBACK: ")
@@ -157,13 +166,13 @@ func (dumper *Dumper) parseEvent(header *EveHeader, data []byte) (Event, error) 
 		}
 	}
 
-	if _, ok := eve.(*QueryEvent); ok {
+	if _, ok := eve.(*event.QueryEvent); ok {
 		// create / drop / alter should sync with meta
 	}
 
 	return nil, nil
 }
 
-func (dumper *Dumper) syncBinlogAndIfSchema(tbl *TableMapEvent) {
+func (dumper *Dumper) syncBinlogAndIfSchema(tbl *event.TableMapEvent) {
 
 }

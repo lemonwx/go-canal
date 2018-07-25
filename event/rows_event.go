@@ -3,7 +3,7 @@
  *  data  : 18-7-19 下午10:22
  */
 
-package binlog
+package event
 
 import (
 	"encoding/binary"
@@ -18,7 +18,7 @@ import (
 )
 
 type RowsEvent struct {
-	header *EveHeader
+	Header *EveHeader
 	tblId  uint64
 	flags  uint16
 
@@ -31,9 +31,7 @@ type RowsEvent struct {
 	encode []byte
 
 	rows []map[int]interface{}
-
-	dumper *Dumper
-	table  *TableMapEvent
+	Table  *TableMapEvent
 }
 
 func (re *RowsEvent) Decode(data []byte) error {
@@ -57,7 +55,6 @@ func (re *RowsEvent) Decode(data []byte) error {
 	size = int((re.fieldSize + 7) / 8)
 	re.bitmap = data[pos : pos+size]
 	pos += size
-	re.table = re.dumper.tables[re.tblId]
 
 	re.ReadRows(data[pos:])
 
@@ -66,7 +63,7 @@ func (re *RowsEvent) Decode(data []byte) error {
 
 func (re *RowsEvent) Dump() string {
 	eveType := ""
-	switch re.header.EveType {
+	switch re.Header.EveType {
 	case WRITE_ROWS_EVENT_V2:
 		eveType = "WRITE_ROWS_EVENT_V2"
 	case DELETE_ROWS_EVENT_V2:
@@ -81,7 +78,7 @@ func (re *RowsEvent) Dump() string {
 
 func (re *RowsEvent) DumpRows() string {
 	buf := bytes.NewBuffer(make([]byte, 0, 128))
-	switch  re.header.EveType {
+	switch  re.Header.EveType {
 	case WRITE_ROWS_EVENT_V2, DELETE_ROWS_EVENT_V2:
 		for _, row := range re.rows {
 			fmt.Fprintf(buf, "[ ")
@@ -96,7 +93,7 @@ func (re *RowsEvent) DumpRows() string {
 		}
 	case UPDATE_ROWS_EVENT_V2:
 	default:
-		
+
 	}
 
 	return buf.String()
@@ -110,7 +107,7 @@ func readTblId(data []byte) uint64 {
 }
 
 func (re *RowsEvent) ReadRows(data []byte) {
-	fieldTypes := re.table.colTypes
+	fieldTypes := re.Table.colTypes
 	re.rows = make([]map[int]interface{}, 0)
 	pos := 0
 
@@ -167,30 +164,30 @@ func (re *RowsEvent) ReadRows(data []byte) {
 	}
 }
 
-func (re *RowsEvent) rollbackForIst(fields []*Field) ([]string, error) {
+func (re *RowsEvent) rollbackForIst(fields []string) ([]string, error) {
 	rbTrxSqls := []string{}
 	for _, row := range re.rows {
 		wheres := []string{}
 		for idx, fieldVal := range row {
-			wheres = append(wheres, fmt.Sprintf("%s=%v", fields[idx].fieldName, fieldVal))
+			wheres = append(wheres, fmt.Sprintf("%s=%v", fields[idx], fieldVal))
 		}
-		rbSql := fmt.Sprintf("delete from %s %s", re.table.fullName, strings.Join(wheres, ", "))
+		rbSql := fmt.Sprintf("delete from %s %s", re.Table.FullName, strings.Join(wheres, ", "))
 		rbTrxSqls = append(rbTrxSqls, rbSql)
 	}
 	return rbTrxSqls, nil
 }
 
-func (re *RowsEvent) rollbackForDel(fields []*Field) ([]string, error) {
+func (re *RowsEvent) rollbackForDel(fields []string) ([]string, error) {
 	rbTrxSqls := []string{}
 	for _, row := range re.rows {
 		values := []string{}
 		fieldNames := []string{}
 		for idx, fieldVal := range row {
 			values = append(values, fmt.Sprintf("%v", fieldVal))
-			fieldNames = append(fieldNames, fields[idx].fieldName)
+			fieldNames = append(fieldNames, fields[idx])
 
 		}
-		rbSql := fmt.Sprintf("insert into %s (%s) values (%s)", re.table.fullName,
+		rbSql := fmt.Sprintf("insert into %s (%s) values (%s)", re.Table.FullName,
 			strings.Join(fieldNames, ", "),
 			strings.Join(values, ", "))
 		rbTrxSqls = append(rbTrxSqls, rbSql)
@@ -202,11 +199,11 @@ func (re *RowsEvent) rollbackForUpdate() ([]string, error) {
 	return nil, nil
 }
 
-func (re *RowsEvent) RollBack(fields []*Field) ([]string, error) {
+func (re *RowsEvent) RollBack(fields []string) ([]string, error) {
 	if uint64(len(fields)) != re.fieldSize {
 		return nil, errors.New("params fields size must equal event.FieldSize")
 	}
-	switch re.header.EveType {
+	switch re.Header.EveType {
 	case WRITE_ROWS_EVENT_V2:
 		return re.rollbackForIst(fields)
 	case DELETE_ROWS_EVENT_V2:

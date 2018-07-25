@@ -3,7 +3,7 @@
  *  data  : 18-7-18 下午9:53
  */
 
-package binlog
+package event
 
 import (
 	"encoding/binary"
@@ -81,7 +81,7 @@ type GtidEvent struct {
 	LastCommitted uint64
 	SeqNum        uint64
 
-	header *EveHeader
+	Header *EveHeader
 	encode []byte
 }
 
@@ -118,7 +118,7 @@ type QueryEvent struct {
 	schema string
 	query  string
 
-	header *EveHeader
+	Header *EveHeader
 	encode []byte
 }
 
@@ -149,18 +149,18 @@ func (queryEve *QueryEvent) Dump() string {
 }
 
 type TableMapEvent struct {
-	header *EveHeader
+	Header *EveHeader
 
-	tblId     uint64
+	TblId     uint64
 	schema    []byte
 	table     []byte
-	fullName  string
+	FullName  string
 	fieldSize uint64
 	colTypes  []byte
 }
 
 func (tbl *TableMapEvent) Decode(data []byte) error {
-	tbl.tblId = readTblId(data)
+	tbl.TblId = readTblId(data)
 	pos := 6
 
 	_ = binary.LittleEndian.Uint16(data[pos:])
@@ -181,7 +181,7 @@ func (tbl *TableMapEvent) Decode(data []byte) error {
 	tbl.table = data[pos : pos+int(tableLength)]
 	pos += int(tableLength)
 
-	tbl.fullName = fmt.Sprintf("%s.%s", tbl.schema, tbl.table)
+	tbl.FullName = fmt.Sprintf("%s.%s", tbl.schema, tbl.table)
 
 	//skip 0x00
 	pos++
@@ -199,5 +199,5 @@ func (tbl *TableMapEvent) Decode(data []byte) error {
 }
 
 func (tbl *TableMapEvent) Dump() string {
-	return fmt.Sprintf("table Id: %d, colType: %v", tbl.tblId, tbl.colTypes)
+	return fmt.Sprintf("table Id: %d, colType: %v", tbl.TblId, tbl.colTypes)
 }

@@ -3,7 +3,7 @@
  *  data  : 18-7-18 下午10:00
  */
 
-package binlog
+package event
 
 const (
 	EventHeaderSize        = 20
