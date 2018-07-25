@@ -1,0 +1,12 @@
+bind:
+  host: localhost
+  port: 1236
+master:
+  host: 172.17.0.2
+  port: 5518
+  user: root
+  password: root
+sync:
+  sync: true
+  synctime: 5
+  synccount: 3
