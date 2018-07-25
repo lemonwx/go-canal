@@ -10,6 +10,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/lemonwx/go-canal/event"
+	"github.com/lemonwx/go-canal/sync"
 	"github.com/lemonwx/log"
 	"github.com/lemonwx/xsql/mysql"
 	"github.com/lemonwx/xsql/node"
@@ -97,6 +98,10 @@ func (listener *Listener) Init() error {
 
 func (listener *Listener) Start() error {
 
+	ch := make(chan event.Event, 10)
+	syncer := sync.NewJsonSyncer("t.json", ch)
+	go syncer.Start()
+
 	for {
 		pkt, err := listener.ReadPacket()
 		if err != nil {
@@ -112,7 +117,12 @@ func (listener *Listener) Start() error {
 			header.Decode(pkt)
 			//log.Debug(header.Dump(), pkt)
 
-			listener.parseEvent(header, pkt[event.EventHeaderSize:])
+			event, err := listener.parseEvent(header, pkt[event.EventHeaderSize:])
+			if err != nil {
+
+			}
+
+			ch <- event
 		}
 	}
 	return nil
@@ -170,7 +180,7 @@ func (listener *Listener) parseEvent(header *event.EveHeader, data []byte) (even
 		// create / drop / alter should sync with meta
 	}
 
-	return nil, nil
+	return eve, nil
 }
 
 func (listener *Listener) syncBinlogAndIfSchema(tbl *event.TableMapEvent) {

@@ -15,12 +15,12 @@ import (
 )
 
 type EveHeader struct {
-	Ts      uint32
-	EveType uint8
-	SvrId   uint32
-	EveSize uint32
-	LogPos  uint32
-	Flags   uint16
+	Ts      uint32 `json:"event_time"`
+	EveType uint8  `json:"event_type"`
+	SvrId   uint32 `json:"server_id"`
+	EveSize uint32 `json:"event_size"`
+	LogPos  uint32 `json:"log_pos"`
+	Flags   uint16 `json:"flag"`
 
 	encode []byte
 }
@@ -74,6 +74,7 @@ type Event interface {
 }
 
 type GtidEvent struct {
+	Header     *EveHeader
 	commitFlag bool
 	sig        []byte
 	gno        uint64
@@ -81,7 +82,6 @@ type GtidEvent struct {
 	LastCommitted uint64
 	SeqNum        uint64
 
-	Header *EveHeader
 	encode []byte
 }
 
@@ -115,10 +115,11 @@ func (gtidEve *GtidEvent) Dump() string {
 }
 
 type QueryEvent struct {
-	schema string
-	query  string
-
 	Header *EveHeader
+
+	Schema string
+	Query  string
+
 	encode []byte
 }
 
@@ -133,30 +134,30 @@ func (queryEve *QueryEvent) Decode(data []byte) error {
 	pos += 2
 
 	pos += int(statusLen)
-	queryEve.schema = string(data[pos : pos+int(schemaLen)])
+	queryEve.Schema = string(data[pos : pos+int(schemaLen)])
 	pos += int(schemaLen)
 	pos += 1
 
 	//queryLen := queryEve.header.EveSize - EventHeaderSize - 13 - uint32(statusLen) - uint32(schemaLen)
-	queryEve.query = string(data[pos:])
+	queryEve.Query = string(data[pos:])
 	queryEve.encode = data
 
 	return nil
 }
 
 func (queryEve *QueryEvent) Dump() string {
-	return fmt.Sprintf("schema: %s, query: %s", queryEve.schema, queryEve.query)
+	return fmt.Sprintf("Schema: %s, query: %s", queryEve.Schema, queryEve.Query)
 }
 
 type TableMapEvent struct {
 	Header *EveHeader
 
 	TblId     uint64
-	schema    []byte
-	table     []byte
+	Schema    []byte
+	Table     []byte
 	FullName  string
-	fieldSize uint64
-	colTypes  []byte
+	FieldSize uint64
+	ColTypes  []byte
 }
 
 func (tbl *TableMapEvent) Decode(data []byte) error {
@@ -169,7 +170,7 @@ func (tbl *TableMapEvent) Decode(data []byte) error {
 	schemaLength := data[pos]
 	pos++
 
-	tbl.schema = data[pos : pos+int(schemaLength)]
+	tbl.Schema = data[pos : pos+int(schemaLength)]
 	pos += int(schemaLength)
 
 	//skip 0x00
@@ -178,20 +179,20 @@ func (tbl *TableMapEvent) Decode(data []byte) error {
 	tableLength := data[pos]
 	pos++
 
-	tbl.table = data[pos : pos+int(tableLength)]
+	tbl.Table = data[pos : pos+int(tableLength)]
 	pos += int(tableLength)
 
-	tbl.FullName = fmt.Sprintf("%s.%s", tbl.schema, tbl.table)
+	tbl.FullName = fmt.Sprintf("%s.%s", tbl.Schema, tbl.Table)
 
 	//skip 0x00
 	pos++
 
 	var n int
-	tbl.fieldSize, _, n = mysql.LengthEncodedInt(data[pos:])
+	tbl.FieldSize, _, n = mysql.LengthEncodedInt(data[pos:])
 	pos += n
 
-	tbl.colTypes = data[pos : pos+int(tbl.fieldSize)]
-	pos += int(tbl.fieldSize)
+	tbl.ColTypes = data[pos : pos+int(tbl.FieldSize)]
+	pos += int(tbl.FieldSize)
 
 	mysql.LengthEnodedString(data[pos:])
 
@@ -199,5 +200,5 @@ func (tbl *TableMapEvent) Decode(data []byte) error {
 }
 
 func (tbl *TableMapEvent) Dump() string {
-	return fmt.Sprintf("table Id: %d, colType: %v", tbl.TblId, tbl.colTypes)
+	return fmt.Sprintf("Table Id: %d, colType: %v", tbl.TblId, tbl.ColTypes)
 }

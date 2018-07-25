@@ -11,33 +11,29 @@ import (
 	"strings"
 	"time"
 
+	"bytes"
 	"github.com/juju/errors"
 	"github.com/lemonwx/log"
 	"github.com/lemonwx/xsql/mysql"
-	"bytes"
 )
 
 type RowsEvent struct {
-	Header *EveHeader
-	tblId  uint64
-	flags  uint16
-
+	Header       *EveHeader
+	TblId        uint64
+	flags        uint16
 	extraDataLen uint16
 	extraData    []byte
-
-	fieldSize uint64
-	bitmap    []byte
-
-	encode []byte
-
-	rows []map[int]interface{}
-	Table  *TableMapEvent
+	fieldSize    uint64
+	bitmap       []byte
+	encode       []byte
+	Rows         []map[int]interface{}
+	Table        *TableMapEvent
 }
 
 func (re *RowsEvent) Decode(data []byte) error {
 	re.encode = data
 
-	re.tblId = readTblId(data)
+	re.TblId = readTblId(data)
 	pos := 6
 
 	re.flags = binary.LittleEndian.Uint16(data[pos : pos+2])
@@ -70,20 +66,20 @@ func (re *RowsEvent) Dump() string {
 		eveType = "DELETE_ROWS_EVENT_V2"
 	}
 
-	return fmt.Sprintf("%s table: %d, field_size: %d, rows: %v",
-		eveType, re.tblId, re.fieldSize,
+	return fmt.Sprintf("%s Table: %d, field_size: %d, rows: %v",
+		eveType, re.TblId, re.fieldSize,
 		re.DumpRows(),
 	)
 }
 
 func (re *RowsEvent) DumpRows() string {
 	buf := bytes.NewBuffer(make([]byte, 0, 128))
-	switch  re.Header.EveType {
+	switch re.Header.EveType {
 	case WRITE_ROWS_EVENT_V2, DELETE_ROWS_EVENT_V2:
-		for _, row := range re.rows {
+		for _, row := range re.Rows {
 			fmt.Fprintf(buf, "[ ")
 			for i := 0; i < len(row); i += 1 {
-				if i == len(row) - 1 {
+				if i == len(row)-1 {
 					fmt.Fprintf(buf, "@%d=%v", i, row[i])
 				} else {
 					fmt.Fprintf(buf, "@%d=%v, ", i, row[i])
@@ -107,8 +103,8 @@ func readTblId(data []byte) uint64 {
 }
 
 func (re *RowsEvent) ReadRows(data []byte) {
-	fieldTypes := re.Table.colTypes
-	re.rows = make([]map[int]interface{}, 0)
+	fieldTypes := re.Table.ColTypes
+	re.Rows = make([]map[int]interface{}, 0)
 	pos := 0
 
 	for pos < len(data) {
@@ -160,13 +156,13 @@ func (re *RowsEvent) ReadRows(data []byte) {
 			}
 			nullbitIndex += 1
 		}
-		re.rows = append(re.rows, row)
+		re.Rows = append(re.Rows, row)
 	}
 }
 
 func (re *RowsEvent) rollbackForIst(fields []string) ([]string, error) {
 	rbTrxSqls := []string{}
-	for _, row := range re.rows {
+	for _, row := range re.Rows {
 		wheres := []string{}
 		for idx, fieldVal := range row {
 			wheres = append(wheres, fmt.Sprintf("%s=%v", fields[idx], fieldVal))
@@ -179,7 +175,7 @@ func (re *RowsEvent) rollbackForIst(fields []string) ([]string, error) {
 
 func (re *RowsEvent) rollbackForDel(fields []string) ([]string, error) {
 	rbTrxSqls := []string{}
-	for _, row := range re.rows {
+	for _, row := range re.Rows {
 		values := []string{}
 		fieldNames := []string{}
 		for idx, fieldVal := range row {
