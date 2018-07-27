@@ -10,3 +10,4 @@
 - decode for all field type
 - decode & rollback update event
 - when mysql meta data change, should sync with dumper.meta
+- format event binlog 开始, rotate event 结束
