@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
+	"github.com/lemonwx/go-canal/binlog"
 	"github.com/lemonwx/go-canal/event"
 	"github.com/lemonwx/log"
 )
@@ -98,4 +99,27 @@ func (syncer *JsonSyncer) TimingSync() {
 		time.Sleep(syncer.syncTimes * time.Second)
 		syncer.Sync()
 	}
+}
+
+func (syncer *JsonSyncer) StartSync() {
+	// format event 开始一个新的 json 文件, 对应一个binlog文件
+	// rotate event 结束一个 json 文件
+	// 接收到一个事件后 根据配置的同步规则 同步到当前的 json 文件中
+}
+
+func (syncer *JsonSyncer) FullSync() {
+
+}
+
+func (syncer *JsonSyncer) IncrementSync() {
+
+}
+
+func (syncer *JsonSyncer) LoadFromJson() error {
+	return nil
+}
+
+func (syncer *JsonSyncer) GetByPk(schema, table string, field binlog.Field, val []byte) {
+	// db.tb.id=1 根据这些信息得到一个 row event, 再由业务侧决定 回滚 还是 其他用途
+
 }
