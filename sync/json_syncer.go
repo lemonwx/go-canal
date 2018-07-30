@@ -16,6 +16,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/lemonwx/go-canal/event"
 	"github.com/lemonwx/log"
+	"io/ioutil"
 )
 
 type BinlogStreamer struct {
@@ -30,7 +31,7 @@ func (streamer *BinlogStreamer) append(eve event.Event) {
 }
 
 type JsonEntry struct {
-	Eve     event.Event
+	Event   event.Event
 	Encoded []byte
 }
 
@@ -57,6 +58,25 @@ func NewJsonSyncer(ch chan event.Event) *JsonSyncer {
 		syncFlag: true,
 	}
 	return syncer
+}
+
+func NewJsonSyncerFromReader(fileName string) (*JsonSyncer, error) {
+	js := &JsonSyncer{}
+	data, err := ioutil.ReadFile(fileName)
+	if err != nil {
+		return nil, err
+	}
+	entrys := []JsonEntry{}
+
+	err = json.Unmarshal(data, &entrys)
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entrys {
+		log.Debug(entry)
+	}
+
+	return js, nil
 }
 
 func (syncer *JsonSyncer) Sync(eve event.Event) error {
