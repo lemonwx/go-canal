@@ -132,6 +132,8 @@ func (listener *Listener) parseEvent(header *event.EveHeader, data []byte) (even
 	data = data[:len(data)-4]
 	var eve event.Event
 	switch header.EveType {
+	case event.FORMAT_DESCRIPTION_EVENT:
+		eve = &event.FormatDescEvent{Header: header}
 	case event.GTID_LOG_EVENT:
 		eve = &event.GtidEvent{Header: header}
 	case event.QUERY_EVENT:

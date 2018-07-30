@@ -202,3 +202,32 @@ func (tbl *TableMapEvent) Decode(data []byte) error {
 func (tbl *TableMapEvent) Dump() string {
 	return fmt.Sprintf("Table Id: %d, colType: %v", tbl.TblId, tbl.ColTypes)
 }
+
+type FormatDescEvent struct {
+	Header *EveHeader
+
+	BinlogVersion uint16
+	SvrVersion    []byte
+	CreateTime    uint32
+
+	Encoded []byte
+}
+
+func (fmtEvent *FormatDescEvent) Decode(data []byte) error {
+	fmtEvent.Encoded = data
+	pos := 0
+	fmtEvent.BinlogVersion = binary.LittleEndian.Uint16(data[pos : pos+2])
+	pos += 2
+	fmtEvent.SvrVersion = make([]byte, 50)
+	copy(fmtEvent.SvrVersion, data[pos:pos+50])
+	pos += 50
+	fmtEvent.CreateTime = binary.LittleEndian.Uint32(data[pos : pos+4])
+	pos += 4
+	//headerSize := data[pos]
+	pos += 1
+	return nil
+}
+
+func (fmtEvent *FormatDescEvent) Dump() string {
+	return fmt.Sprintf("%d - %s", fmtEvent.BinlogVersion, fmtEvent.SvrVersion)
+}
