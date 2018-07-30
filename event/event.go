@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
+	"github.com/lemonwx/log"
 	"github.com/lemonwx/xsql/mysql"
 )
 
@@ -230,4 +231,46 @@ func (fmtEvent *FormatDescEvent) Decode(data []byte) error {
 
 func (fmtEvent *FormatDescEvent) Dump() string {
 	return fmt.Sprintf("%d - %s", fmtEvent.BinlogVersion, fmtEvent.SvrVersion)
+}
+
+type RotateEvent struct {
+	Header *EveHeader
+
+	Pos        uint64
+	NextBinlog string
+
+	Encoded []byte
+}
+
+func (rotateEve *RotateEvent) Decode(data []byte) error {
+	rotateEve.Encoded = data
+	pos := 0
+	rotateEve.Pos = binary.LittleEndian.Uint64(data[pos : pos+8])
+	pos += 8
+	rotateEve.NextBinlog = string(data[pos:])
+	return nil
+}
+
+func (rotateEve *RotateEvent) Dump() string {
+	return fmt.Sprintf("next binlog: %s", rotateEve.NextBinlog)
+}
+
+type PreGtidLogEvent struct {
+	Header *EveHeader
+
+	Encoded []byte
+}
+
+func (preGtid *PreGtidLogEvent) Decode(data []byte) error {
+	preGtid.Encoded = data
+	log.Debug(data)
+	pos := 0
+	log.Debug(data[pos : pos+8])
+	pos += 8
+	log.Debug(string(data[pos:]))
+	return nil
+}
+
+func (preGtid *PreGtidLogEvent) Dump() string {
+	return ""
 }

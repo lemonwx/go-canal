@@ -134,6 +134,8 @@ func (listener *Listener) parseEvent(header *event.EveHeader, data []byte) (even
 	switch header.EveType {
 	case event.FORMAT_DESCRIPTION_EVENT:
 		eve = &event.FormatDescEvent{Header: header}
+	case event.PREVIOUS_GTIDS_LOG_EVENT:
+		eve = &event.PreGtidLogEvent{Header: header}
 	case event.GTID_LOG_EVENT:
 		eve = &event.GtidEvent{Header: header}
 	case event.QUERY_EVENT:
@@ -145,6 +147,8 @@ func (listener *Listener) parseEvent(header *event.EveHeader, data []byte) (even
 		eve = &event.RowsEvent{Header: header, Table: listener.curTblEve}
 	case event.XID_EVENT:
 		log.Debug("xid event", data)
+	case event.ROTATE_EVENT:
+		eve = &event.RotateEvent{Header: header}
 	default:
 		log.Debug(header.EveType)
 	}
