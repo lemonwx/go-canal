@@ -7,19 +7,19 @@ package sync
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"fmt"
+	"io"
 	"os"
 	bsync "sync"
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/lemonwx/go-canal/binlog"
 	"github.com/lemonwx/go-canal/event"
 	"github.com/lemonwx/log"
 )
 
 type BinlogStreamer struct {
-	Events []event.Event `json:"events"`
+	Events []event.Event
 	bsync.RWMutex
 }
 
@@ -29,19 +29,28 @@ func (streamer *BinlogStreamer) append(eve event.Event) {
 	streamer.Unlock()
 }
 
+type JsonEntry struct {
+	Eve     event.Event
+	Encoded []byte
+}
+
 type JsonSyncer struct {
-	fileName   string
 	streamer   *BinlogStreamer
 	ch         chan event.Event
 	syncFlag   bool
 	syncTimes  time.Duration
 	syncCounts int
+
+	curWriter io.Writer
 }
 
-func NewJsonSyncer(fileName string, ch chan event.Event) *JsonSyncer {
+func NewFileWriter(fileName string) (io.Writer, error) {
+	return os.OpenFile(fileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0664)
+}
+
+func NewJsonSyncer(ch chan event.Event) *JsonSyncer {
 	syncer := &JsonSyncer{
-		fileName: fileName,
-		ch:       ch,
+		ch: ch,
 		streamer: &BinlogStreamer{
 			Events: make([]event.Event, 0, 1024),
 		},
@@ -50,29 +59,47 @@ func NewJsonSyncer(fileName string, ch chan event.Event) *JsonSyncer {
 	return syncer
 }
 
+func (syncer *JsonSyncer) Sync(eve event.Event) error {
+	encoded, err := json.Marshal(eve)
+	if err != nil {
+		log.Error(err)
+		return errors.Trace(err)
+	}
+	entry := JsonEntry{Eve: eve, Encoded: encoded}
+	switch e := eve.(type) {
+	case *event.FormatDescEvent:
+		data, _ := json.Marshal(&entry)
+		fmt.Fprintf(syncer.curWriter, "\n\t%s,\n", data)
+	case *event.RotateEvent:
+		if e.Header.Ts == 0 {
+			syncer.curWriter, err = NewFileWriter(e.NextBinlog)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		data, err := json.Marshal(&entry)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if e.Header.Ts == 0 {
+			fmt.Fprintf(syncer.curWriter, "[\n\t%s,\n", data)
+		} else {
+			fmt.Fprintf(syncer.curWriter, "\n\t%s\n]", data)
+		}
+	default:
+		data, _ := json.Marshal(&entry)
+		fmt.Fprintf(syncer.curWriter, "\n\t%s,\n", data)
+	}
+	return nil
+}
+
 func (syncer *JsonSyncer) Start() {
 	log.Debug("Syncer start")
 	for {
 		eve := <-syncer.ch
 		syncer.streamer.append(eve)
-		if syncer.syncFlag {
-			// 每接收到 binlog evnet 向文件中全量同步一次
-			syncer.Sync()
-		}
+		syncer.Sync(eve)
 	}
-}
-
-func (syncer *JsonSyncer) Sync() error {
-	// 同步 所有的binlog event 到文件中
-	syncer.streamer.RLock()
-	encode, err := json.Marshal(syncer.streamer)
-	syncer.streamer.RUnlock()
-
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	return ioutil.WriteFile(syncer.fileName, encode, os.ModePerm)
 }
 
 func (syncer *JsonSyncer) CountSync() error {
@@ -80,24 +107,23 @@ func (syncer *JsonSyncer) CountSync() error {
 	for {
 		syncer.streamer.RLock()
 		if len(syncer.streamer.Events)%syncer.syncCounts == 0 {
-			encode, err := json.Marshal(syncer.streamer)
+			_, err := json.Marshal(syncer.streamer)
 			syncer.streamer.RUnlock()
 			if err != nil {
 				return errors.Trace(err)
 			}
-			return ioutil.WriteFile(syncer.fileName, encode, os.ModePerm)
+			return nil
 		} else {
 			syncer.streamer.RUnlock()
 		}
 	}
-
 }
 
 func (syncer *JsonSyncer) TimingSync() {
 	// 定时同步 binlog event
 	for {
 		time.Sleep(syncer.syncTimes * time.Second)
-		syncer.Sync()
+		//syncer.Sync()
 	}
 }
 
@@ -119,7 +145,7 @@ func (syncer *JsonSyncer) LoadFromJson() error {
 	return nil
 }
 
-func (syncer *JsonSyncer) GetByPk(schema, table string, field binlog.Field, val []byte) {
+func (syncer *JsonSyncer) GetByPk(schema, table string, field string, val []byte) {
 	// db.tb.id=1 根据这些信息得到一个 row event, 再由业务侧决定 回滚 还是 其他用途
 
 }

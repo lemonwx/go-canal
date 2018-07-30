@@ -99,7 +99,7 @@ func (listener *Listener) Init() error {
 func (listener *Listener) Start() error {
 
 	ch := make(chan event.Event, 10)
-	syncer := sync.NewJsonSyncer("t.json", ch)
+	syncer := sync.NewJsonSyncer(ch)
 	go syncer.Start()
 
 	for {

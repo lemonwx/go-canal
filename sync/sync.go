@@ -5,8 +5,10 @@
 
 package sync
 
-import ()
+import (
+	"github.com/lemonwx/go-canal/event"
+)
 
 type Syncer interface {
-	Sync() error
+	Sync(event event.Event) error
 }
