@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	bsync "sync"
 	"time"
@@ -16,7 +17,6 @@ import (
 	"github.com/juju/errors"
 	"github.com/lemonwx/go-canal/event"
 	"github.com/lemonwx/log"
-	"io/ioutil"
 )
 
 type BinlogStreamer struct {
@@ -59,25 +59,6 @@ func NewJsonSyncer(ch chan event.Event) *JsonSyncer {
 		syncFlag: true,
 	}
 	return syncer
-}
-
-func NewJsonSyncerFromReader(fileName string) (*JsonSyncer, error) {
-	js := &JsonSyncer{}
-	data, err := ioutil.ReadFile(fileName)
-	if err != nil {
-		return nil, err
-	}
-	entrys := []JsonEntry{}
-
-	err = json.Unmarshal(data, &entrys)
-	if err != nil {
-		return nil, err
-	}
-	for _, entry := range entrys {
-		log.Debug(entry)
-	}
-
-	return js, nil
 }
 
 func (syncer *JsonSyncer) Sync(eve event.Event) error {
@@ -172,4 +153,78 @@ func (syncer *JsonSyncer) LoadFromJson() error {
 func (syncer *JsonSyncer) GetByPk(schema, table string, field string, val []byte) {
 	// db.tb.id=1 根据这些信息得到一个 row event, 再由业务侧决定 回滚 还是 其他用途
 
+}
+
+func NewJsonSyncerFromLocalFile(startFile string) (*JsonSyncer, error) {
+	js := &JsonSyncer{
+		streamer: &BinlogStreamer{
+			Events: make([]event.Event, 0, 1024),
+		},
+	}
+
+	fileName := startFile
+	for {
+		data, err := ioutil.ReadFile(fileName)
+		if err != nil {
+			return nil, err
+		}
+
+		entrys := []JsonEntry{}
+		err = json.Unmarshal(data, &entrys)
+		if err != nil {
+			if err.Error() == "unexpected end of JSON input" {
+				// 异常退出, 没有及时写入到 json 文件, 则从该 json 文件对应的 binlog 位置 重新同步 binlog
+				return js, err
+			}
+			return nil, err
+		}
+		for idx, entry := range entrys {
+			eve, err := DecodeFromJson(entry)
+			if err != nil {
+				return nil, err
+			}
+
+			js.streamer.append(eve)
+			log.Debug(entry.EventType)
+
+			if idx == len(entrys)-1 {
+				if rotate, ok := eve.(*event.RotateEvent); ok {
+					fileName = "../cmd/binlog/" + rotate.NextBinlog
+				} else {
+					return nil, fmt.Errorf("last event should be RotateEvent, but recv: %v", eve)
+				}
+			}
+		}
+	}
+
+	return js, nil
+}
+
+func DecodeFromJson(entry JsonEntry) (event.Event, error) {
+	var eve event.Event
+
+	switch entry.EventType {
+	case event.ROTATE_EVENT:
+		eve = &event.RotateEvent{}
+	case event.FORMAT_DESCRIPTION_EVENT:
+		eve = &event.FormatDescEvent{}
+	case event.QUERY_EVENT:
+		eve = &event.QueryEvent{}
+	case event.WRITE_ROWS_EVENT_V2, event.UPDATE_ROWS_EVENT_V2, event.DELETE_ROWS_EVENT_V2:
+		eve = &event.RowsEvent{}
+	case event.TABLE_MAP_EVENT:
+		eve = &event.TableMapEvent{}
+	case event.GTID_LOG_EVENT:
+		eve = &event.GtidEvent{}
+	case event.XID_EVENT:
+		eve = &event.XidEvnet{}
+
+	default:
+		eve = &event.FormatDescEvent{}
+	}
+
+	if err := json.Unmarshal(entry.Encoded, &eve); err != nil {
+		return nil, err
+	}
+	return eve, nil
 }

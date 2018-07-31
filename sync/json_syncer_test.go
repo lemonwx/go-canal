@@ -6,21 +6,16 @@
 package sync
 
 import (
-	"encoding/json"
-	"github.com/lemonwx/go-canal/event"
-	"io/ioutil"
 	"testing"
 )
 
 func TestNewJsonSyncerFromReader(t *testing.T) {
-	entrys := []JsonEntry{}
-	data, _ := ioutil.ReadFile("../cmd/mysql-bin.000001")
+	syncer, err := NewJsonSyncerFromLocalFile("../cmd/binlog/mysql-bin.000004")
+	if err != nil {
+		t.Error(err)
+	}
 
-	err := json.Unmarshal(data, &entrys)
-	t.Log(err)
-	for _, e := range entrys {
-		v := event.TableMapEvent{}
-		json.Unmarshal(e.Encoded, &v)
-		t.Log(v)
+	for _, entry := range syncer.streamer.Events {
+		t.Log(entry.Dump())
 	}
 }
