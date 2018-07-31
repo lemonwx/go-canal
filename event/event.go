@@ -74,6 +74,26 @@ type Event interface {
 	Dump() string
 }
 
+func GetEventType(eve Event) uint8 {
+	switch e := eve.(type) {
+	case *GtidEvent:
+		return e.Header.EveType
+	case *QueryEvent:
+		return e.Header.EveType
+	case *FormatDescEvent:
+		return e.Header.EveType
+	case *PreGtidLogEvent:
+		return e.Header.EveType
+	case *RotateEvent:
+		return e.Header.EveType
+	case *RowsEvent:
+		return e.Header.EveType
+	case *TableMapEvent:
+		return e.Header.EveType
+	}
+	return 0
+}
+
 type GtidEvent struct {
 	Header     *EveHeader
 	commitFlag bool
@@ -267,7 +287,7 @@ func (preGtid *PreGtidLogEvent) Decode(data []byte) error {
 	pos := 0
 	log.Debug(data[pos : pos+8])
 	pos += 8
-	log.Debug(string(data[pos:]))
+	//log.Debug(string(data[pos:]))
 	return nil
 }
 

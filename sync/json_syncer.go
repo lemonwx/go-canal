@@ -31,7 +31,8 @@ func (streamer *BinlogStreamer) append(eve event.Event) {
 }
 
 type JsonEntry struct {
-	Event   event.Event
+	EventType uint8
+
 	Encoded []byte
 }
 
@@ -85,32 +86,35 @@ func (syncer *JsonSyncer) Sync(eve event.Event) error {
 		log.Error(err)
 		return errors.Trace(err)
 	}
-	entry := JsonEntry{Eve: eve, Encoded: encoded}
-	switch e := eve.(type) {
-	case *event.FormatDescEvent:
-		data, _ := json.Marshal(&entry)
-		fmt.Fprintf(syncer.curWriter, "\n\t%s,\n", data)
-	case *event.RotateEvent:
-		if e.Header.Ts == 0 {
-			syncer.curWriter, err = NewFileWriter(e.NextBinlog)
-			if err != nil {
+
+	entry := JsonEntry{EventType: event.GetEventType(eve), Encoded: encoded}
+	data, err := json.Marshal(&entry)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	writeFmt := ""
+
+	switch entry.EventType {
+	case event.FORMAT_DESCRIPTION_EVENT:
+		writeFmt = "\n\t%s,\n"
+	case event.ROTATE_EVENT:
+		rotate := eve.(*event.RotateEvent)
+		if rotate.Header.Ts == 0 {
+			if syncer.curWriter, err = NewFileWriter(rotate.NextBinlog); err != nil {
 				return errors.Trace(err)
 			}
 		}
-		data, err := json.Marshal(&entry)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if e.Header.Ts == 0 {
-			fmt.Fprintf(syncer.curWriter, "[\n\t%s,\n", data)
+		if rotate.Header.Ts == 0 {
+			writeFmt = "[\n\t%s,\n"
 		} else {
-			fmt.Fprintf(syncer.curWriter, "\n\t%s\n]", data)
+			writeFmt = "\n\t%s\n]"
 		}
 	default:
-		data, _ := json.Marshal(&entry)
-		fmt.Fprintf(syncer.curWriter, "\n\t%s,\n", data)
+		writeFmt = "\n\t%s,\n"
 	}
-	return nil
+
+	_, err = fmt.Fprintf(syncer.curWriter, writeFmt, data)
+	return err
 }
 
 func (syncer *JsonSyncer) Start() {
