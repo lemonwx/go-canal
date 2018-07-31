@@ -150,6 +150,8 @@ func (listener *Listener) parseEvent(header *event.EveHeader, data []byte) (even
 		log.Debug("xid event", data)
 	case event.ROTATE_EVENT:
 		eve = &event.RotateEvent{Header: header}
+	case event.STOP_EVENT:
+		eve = &event.StopEvent{Header: header}
 	default:
 		log.Debug(header.EveType)
 	}

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/lemonwx/log"
 	"github.com/lemonwx/xsql/mysql"
 )
 
@@ -92,6 +91,8 @@ func GetEventType(eve Event) uint8 {
 		return e.Header.EveType
 	case *TableMapEvent:
 		return e.Header.EveType
+	case *StopEvent:
+		return e.Header.EveType
 	}
 	return 0
 }
@@ -141,17 +142,17 @@ type XidEvnet struct {
 	Header  *EveHeader
 	Encoded []byte
 
-	Seq uint64
+	Xid uint64
 }
 
 func (xidEve *XidEvnet) Decode(data []byte) error {
 	xidEve.Encoded = data
-	xidEve.Seq = binary.LittleEndian.Uint64(data)
+	xidEve.Xid = binary.LittleEndian.Uint64(data)
 	return nil
 }
 
 func (xidEve *XidEvnet) Dump() string {
-	return fmt.Sprintf("XidEvent, seq: %d", xidEve.Seq)
+	return fmt.Sprintf("XidEvent, seq: %d", xidEve.Xid)
 }
 
 type QueryEvent struct {
@@ -286,12 +287,26 @@ func (rotateEve *RotateEvent) Decode(data []byte) error {
 	pos := 0
 	rotateEve.Pos = binary.LittleEndian.Uint64(data[pos : pos+8])
 	pos += 8
-	rotateEve.NextBinlog = string(data[pos:])
+	rotateEve.NextBinlog = BASE_BINLOG_PATH + string(data[pos:])
 	return nil
 }
 
 func (rotateEve *RotateEvent) Dump() string {
 	return fmt.Sprintf("next binlog: %s", rotateEve.NextBinlog)
+}
+
+type StopEvent struct {
+	Header  *EveHeader
+	Encoded []byte
+}
+
+func (stop *StopEvent) Decode(data []byte) error {
+	stop.Encoded = data
+	return nil
+}
+
+func (stop *StopEvent) Dump() string {
+	return fmt.Sprintf("StopEvent")
 }
 
 type PreGtidLogEvent struct {
@@ -302,14 +317,11 @@ type PreGtidLogEvent struct {
 
 func (preGtid *PreGtidLogEvent) Decode(data []byte) error {
 	preGtid.Encoded = data
-	log.Debug(data)
 	pos := 0
-	log.Debug(data[pos : pos+8])
 	pos += 8
-	//log.Debug(string(data[pos:]))
 	return nil
 }
 
 func (preGtid *PreGtidLogEvent) Dump() string {
-	return ""
+	return "PreGtidLogEvent"
 }

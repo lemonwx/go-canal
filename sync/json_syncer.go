@@ -17,6 +17,8 @@ import (
 	"github.com/juju/errors"
 	"github.com/lemonwx/go-canal/event"
 	"github.com/lemonwx/log"
+	"strconv"
+	"strings"
 )
 
 type BinlogStreamer struct {
@@ -90,6 +92,8 @@ func (syncer *JsonSyncer) Sync(eve event.Event) error {
 		} else {
 			writeFmt = "\n\t%s\n]"
 		}
+	case event.STOP_EVENT:
+		writeFmt = "\n\t%s\n]"
 	default:
 		writeFmt = "\n\t%s,\n"
 	}
@@ -188,8 +192,16 @@ func NewJsonSyncerFromLocalFile(startFile string) (*JsonSyncer, error) {
 			log.Debug(entry.EventType)
 
 			if idx == len(entrys)-1 {
-				if rotate, ok := eve.(*event.RotateEvent); ok {
-					fileName = "../cmd/binlog/" + rotate.NextBinlog
+				if _, ok := eve.(*event.StopEvent); ok {
+					to := strings.Split(fileName, ".")
+					nextIdx, err := strconv.ParseUint(to[len(to)-1], 10, 64)
+					if err != nil {
+						return nil, err
+					}
+
+					fileName = fmt.Sprintf("../cmd/%s/mysql-bin.%06d", event.BASE_BINLOG_PATH, nextIdx+1)
+				} else if rotate, ok := eve.(*event.RotateEvent); ok {
+					fileName = "../cmd/" + rotate.NextBinlog
 				} else {
 					return nil, fmt.Errorf("last event should be RotateEvent, but recv: %v", eve)
 				}
@@ -218,6 +230,8 @@ func DecodeFromJson(entry JsonEntry) (event.Event, error) {
 		eve = &event.GtidEvent{}
 	case event.XID_EVENT:
 		eve = &event.XidEvnet{}
+	case event.STOP_EVENT:
+		eve = &event.StopEvent{}
 
 	default:
 		eve = &event.FormatDescEvent{}

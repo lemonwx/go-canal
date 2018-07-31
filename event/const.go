@@ -48,3 +48,7 @@ const (
 	ANONYMOUS_GTID_LOG_EVENT = 0x22
 	PREVIOUS_GTIDS_LOG_EVENT = 0x23
 )
+
+const (
+	BASE_BINLOG_PATH = "binlog/"
+)
