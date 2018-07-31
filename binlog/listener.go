@@ -146,6 +146,7 @@ func (listener *Listener) parseEvent(header *event.EveHeader, data []byte) (even
 		log.Debug(listener.curTblEve)
 		eve = &event.RowsEvent{Header: header, Table: listener.curTblEve}
 	case event.XID_EVENT:
+		eve = &event.XidEvnet{Header: header}
 		log.Debug("xid event", data)
 	case event.ROTATE_EVENT:
 		eve = &event.RotateEvent{Header: header}

@@ -78,6 +78,8 @@ func GetEventType(eve Event) uint8 {
 	switch e := eve.(type) {
 	case *GtidEvent:
 		return e.Header.EveType
+	case *XidEvnet:
+		return e.Header.EveType
 	case *QueryEvent:
 		return e.Header.EveType
 	case *FormatDescEvent:
@@ -133,6 +135,23 @@ func (gtidEve *GtidEvent) Dump() string {
 		gtidEve.LastCommitted,
 		gtidEve.SeqNum,
 	)
+}
+
+type XidEvnet struct {
+	Header  *EveHeader
+	Encoded []byte
+
+	Seq uint64
+}
+
+func (xidEve *XidEvnet) Decode(data []byte) error {
+	xidEve.Encoded = data
+	xidEve.Seq = binary.LittleEndian.Uint64(data)
+	return nil
+}
+
+func (xidEve *XidEvnet) Dump() string {
+	return fmt.Sprintf("XidEvent, seq: %d", xidEve.Seq)
 }
 
 type QueryEvent struct {
