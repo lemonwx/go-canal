@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
+	"github.com/lemonwx/go-canal/binlog"
 	"github.com/lemonwx/go-canal/event"
 	"github.com/lemonwx/log"
 	"strconv"
@@ -46,6 +47,7 @@ type JsonSyncer struct {
 	syncCounts int
 
 	curWriter io.Writer
+	CurPos    binlog.Pos
 }
 
 func NewFileWriter(fileName string) (io.Writer, error) {
@@ -61,6 +63,10 @@ func NewJsonSyncer(ch chan event.Event) *JsonSyncer {
 		syncFlag: true,
 	}
 	return syncer
+}
+
+func (syncer *JsonSyncer) SetupChan(ch chan event.Event) {
+	syncer.ch = ch
 }
 
 func (syncer *JsonSyncer) Sync(eve event.Event) error {
@@ -83,7 +89,7 @@ func (syncer *JsonSyncer) Sync(eve event.Event) error {
 	case event.ROTATE_EVENT:
 		rotate := eve.(*event.RotateEvent)
 		if rotate.Header.Ts == 0 {
-			if syncer.curWriter, err = NewFileWriter(rotate.NextBinlog); err != nil {
+			if syncer.curWriter, err = NewFileWriter(event.BASE_BINLOG_PATH + rotate.NextBinlog); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -168,28 +174,25 @@ func NewJsonSyncerFromLocalFile(startFile string) (*JsonSyncer, error) {
 
 	fileName := startFile
 	for {
-		data, err := ioutil.ReadFile(fileName)
+		log.Debugf("parse binlog from %s", fileName)
+		data, err := ioutil.ReadFile(event.BASE_BINLOG_PATH + fileName)
 		if err != nil {
-			return nil, err
+			break
 		}
 
 		entrys := []JsonEntry{}
 		err = json.Unmarshal(data, &entrys)
 		if err != nil {
-			if err.Error() == "unexpected end of JSON input" {
-				// 异常退出, 没有及时写入到 json 文件, 则从该 json 文件对应的 binlog 位置 重新同步 binlog
-				return js, err
-			}
-			return nil, err
+			return nil, errors.Trace(fmt.Errorf("parse [%s] failed: %v", fileName, err))
 		}
+
 		for idx, entry := range entrys {
 			eve, err := DecodeFromJson(entry)
 			if err != nil {
-				return nil, err
+				return nil, errors.Trace(err)
 			}
 
 			js.streamer.append(eve)
-			log.Debug(entry.EventType)
 
 			if idx == len(entrys)-1 {
 				if _, ok := eve.(*event.StopEvent); ok {
@@ -198,17 +201,17 @@ func NewJsonSyncerFromLocalFile(startFile string) (*JsonSyncer, error) {
 					if err != nil {
 						return nil, err
 					}
-
-					fileName = fmt.Sprintf("../cmd/%s/mysql-bin.%06d", event.BASE_BINLOG_PATH, nextIdx+1)
+					fileName = fmt.Sprintf("mysql-bin.%06d", nextIdx+1)
 				} else if rotate, ok := eve.(*event.RotateEvent); ok {
-					fileName = "../cmd/" + rotate.NextBinlog
+					log.Debugf("get next binlog %s from rotate event", rotate.NextBinlog)
+					fileName = rotate.NextBinlog
 				} else {
 					return nil, fmt.Errorf("last event should be RotateEvent, but recv: %v", eve)
 				}
 			}
 		}
 	}
-
+	js.CurPos = binlog.Pos{fileName, 4}
 	return js, nil
 }
 
@@ -238,7 +241,7 @@ func DecodeFromJson(entry JsonEntry) (event.Event, error) {
 	}
 
 	if err := json.Unmarshal(entry.Encoded, &eve); err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	return eve, nil
 }

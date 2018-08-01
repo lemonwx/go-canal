@@ -10,7 +10,6 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/lemonwx/go-canal/event"
-	"github.com/lemonwx/go-canal/sync"
 	"github.com/lemonwx/log"
 	"github.com/lemonwx/xsql/mysql"
 	"github.com/lemonwx/xsql/node"
@@ -20,11 +19,17 @@ const (
 	DEFAULT_SCHEMA = "information_schema"
 )
 
+type Pos struct {
+	FileName string
+	Pos      uint32
+}
+
 type Listener struct {
 	*node.Node
 	meta      *InformationSchema
 	tables    map[uint64]*event.TableMapEvent
 	curTblEve *event.TableMapEvent
+	CurPos    Pos
 }
 
 func NewBinlogListener(host string, port int, user, password string) *Listener {
@@ -33,7 +38,7 @@ func NewBinlogListener(host string, port int, user, password string) *Listener {
 }
 
 func (listener *Listener) getFileAndPos() (string, uint32, error) {
-	return "mysql-bin.000001", 4, nil
+	return listener.CurPos.FileName, listener.CurPos.Pos, nil
 }
 
 func (listener *Listener) writeDumpCmd() error {
@@ -66,7 +71,8 @@ func (listener *Listener) writeDumpCmd() error {
 	return nil
 }
 
-func (listener *Listener) Init() error {
+func (listener *Listener) Init(pos Pos) error {
+	listener.CurPos = pos
 
 	err := listener.Connect()
 	if err != nil {
@@ -96,11 +102,7 @@ func (listener *Listener) Init() error {
 	return nil
 }
 
-func (listener *Listener) Start() error {
-
-	ch := make(chan event.Event, 10)
-	syncer := sync.NewJsonSyncer(ch)
-	go syncer.Start()
+func (listener *Listener) Start(ch chan event.Event) error {
 
 	for {
 		pkt, err := listener.ReadPacket()
@@ -111,7 +113,7 @@ func (listener *Listener) Start() error {
 
 		switch pkt[0] {
 		case mysql.ERR_HEADER:
-			log.Debug(pkt[1:])
+			log.Debug(string(pkt[1:]))
 		case mysql.OK_HEADER:
 			header := &event.EveHeader{}
 			header.Decode(pkt)

@@ -287,7 +287,7 @@ func (rotateEve *RotateEvent) Decode(data []byte) error {
 	pos := 0
 	rotateEve.Pos = binary.LittleEndian.Uint64(data[pos : pos+8])
 	pos += 8
-	rotateEve.NextBinlog = BASE_BINLOG_PATH + string(data[pos:])
+	rotateEve.NextBinlog = string(data[pos:])
 	return nil
 }
 
