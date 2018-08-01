@@ -8,6 +8,7 @@ package binlog
 import (
 	"encoding/binary"
 
+	"fmt"
 	"github.com/juju/errors"
 	"github.com/lemonwx/go-canal/event"
 	"github.com/lemonwx/log"
@@ -30,6 +31,10 @@ type Listener struct {
 	tables    map[uint64]*event.TableMapEvent
 	curTblEve *event.TableMapEvent
 	CurPos    Pos
+}
+
+func (listener *Listener) String() string {
+	return fmt.Sprintf("%v:%v", listener.Node.String(), listener.CurPos)
 }
 
 func NewBinlogListener(host string, port int, user, password string) *Listener {
@@ -107,6 +112,7 @@ func (listener *Listener) Start(ch chan event.Event) error {
 	for {
 		pkt, err := listener.ReadPacket()
 		if err != nil {
+			log.Errorf("listener: [%v] read pkt failed: %v", listener, err)
 			return errors.Trace(err)
 			break
 		}
