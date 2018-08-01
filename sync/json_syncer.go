@@ -11,6 +11,8 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strconv"
+	"strings"
 	bsync "sync"
 	"time"
 
@@ -18,8 +20,6 @@ import (
 	"github.com/lemonwx/go-canal/binlog"
 	"github.com/lemonwx/go-canal/event"
 	"github.com/lemonwx/log"
-	"strconv"
-	"strings"
 )
 
 type BinlogStreamer struct {
@@ -34,6 +34,7 @@ func (streamer *BinlogStreamer) append(eve event.Event) {
 }
 
 type JsonEntry struct {
+	EventName string
 	EventType uint8
 
 	Encoded []byte
@@ -76,7 +77,8 @@ func (syncer *JsonSyncer) Sync(eve event.Event) error {
 		return errors.Trace(err)
 	}
 
-	entry := JsonEntry{EventType: event.GetEventType(eve), Encoded: encoded}
+	Type := event.GetEventType(eve)
+	entry := JsonEntry{event.EventName[Type], Type, encoded}
 	data, err := json.Marshal(&entry)
 	if err != nil {
 		return errors.Trace(err)
