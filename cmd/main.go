@@ -43,6 +43,12 @@ func setupJsonSyncer() {
 
 	syncer.SetupChan(ch)
 	pos = syncer.CurPos
+
+	if err = syncer.RemoveBinlogGtNow(pos.FileName); err != nil {
+		log.Errorf("rm binlog gt now failed: %v", errors.ErrorStack(err))
+		panic(err)
+	}
+
 	go syncer.Start()
 
 }

@@ -215,6 +215,24 @@ func NewJsonSyncerFromLocalFile(startFile string) (*JsonSyncer, error) {
 	return js, nil
 }
 
+func (syncer *JsonSyncer) RemoveBinlogGtNow(filename string) error {
+	fs, err := ioutil.ReadDir(event.BASE_BINLOG_PATH)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	for _, f := range fs {
+		log.Debug(f.Name() >= filename)
+		if f.Name() >= filename {
+			if err = os.Remove(event.BASE_BINLOG_PATH + f.Name()); err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
+
+	return nil
+}
+
 func DecodeFromJson(entry JsonEntry) (event.Event, error) {
 	var eve event.Event
 
