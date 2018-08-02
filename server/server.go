@@ -12,7 +12,6 @@ import (
 	"sync"
 
 	"github.com/lemonwx/go-canal/syncer"
-	"github.com/lemonwx/log"
 )
 
 type Server struct {

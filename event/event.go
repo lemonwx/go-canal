@@ -131,8 +131,7 @@ func (gtidEve *GtidEvent) Decode(data []byte) error {
 }
 
 func (gtidEve *GtidEvent) Dump() string {
-	return fmt.Sprintf("commited flag: %v, last commited: %d, seq num: %d",
-		gtidEve.commitFlag,
+	return fmt.Sprintf("GtidEvent last commited: %d, seq num: %d",
 		gtidEve.LastCommitted,
 		gtidEve.SeqNum,
 	)
@@ -152,7 +151,7 @@ func (xidEve *XidEvnet) Decode(data []byte) error {
 }
 
 func (xidEve *XidEvnet) Dump() string {
-	return fmt.Sprintf("XidEvent, seq: %d", xidEve.Xid)
+	return fmt.Sprintf("XidEvent xid: %d", xidEve.Xid)
 }
 
 type QueryEvent struct {
@@ -187,7 +186,7 @@ func (queryEve *QueryEvent) Decode(data []byte) error {
 }
 
 func (queryEve *QueryEvent) Dump() string {
-	return fmt.Sprintf("Schema: %s, query: %s", queryEve.Schema, queryEve.Query)
+	return fmt.Sprintf("QueryEvent query: %s", queryEve.Query)
 }
 
 type TableMapEvent struct {
@@ -241,7 +240,7 @@ func (tbl *TableMapEvent) Decode(data []byte) error {
 }
 
 func (tbl *TableMapEvent) Dump() string {
-	return fmt.Sprintf("Table Id: %d, colType: %v", tbl.TblId, tbl.ColTypes)
+	return fmt.Sprintf("TableMapEvent id:%d, schema: %s, table: %s", tbl.TblId, tbl.Schema, tbl.Table)
 }
 
 type FormatDescEvent struct {
@@ -270,7 +269,7 @@ func (fmtEvent *FormatDescEvent) Decode(data []byte) error {
 }
 
 func (fmtEvent *FormatDescEvent) Dump() string {
-	return fmt.Sprintf("%d - %s", fmtEvent.BinlogVersion, fmtEvent.SvrVersion)
+	return fmt.Sprintf("FormatDescEvent %d - %s", fmtEvent.BinlogVersion, fmtEvent.SvrVersion)
 }
 
 type RotateEvent struct {
@@ -292,7 +291,7 @@ func (rotateEve *RotateEvent) Decode(data []byte) error {
 }
 
 func (rotateEve *RotateEvent) Dump() string {
-	return fmt.Sprintf("next binlog: %s", rotateEve.NextBinlog)
+	return fmt.Sprintf("RotateEvent next binlog: %s", rotateEve.NextBinlog)
 }
 
 type StopEvent struct {
@@ -323,5 +322,5 @@ func (preGtid *PreGtidLogEvent) Decode(data []byte) error {
 }
 
 func (preGtid *PreGtidLogEvent) Dump() string {
-	return "PreGtidLogEvent"
+	return "PreviousGtidLogEvent"
 }

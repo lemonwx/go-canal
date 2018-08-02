@@ -61,9 +61,9 @@ func (re *RowsEvent) Dump() string {
 	eveType := ""
 	switch re.Header.EveType {
 	case WRITE_ROWS_EVENT_V2:
-		eveType = "WRITE_ROWS_EVENT_V2"
+		eveType = "WriteRowsEvent"
 	case DELETE_ROWS_EVENT_V2:
-		eveType = "DELETE_ROWS_EVENT_V2"
+		eveType = "DeleteRowsEvent"
 	}
 
 	return fmt.Sprintf("%s Table: %d, field_size: %d, rows: %v",
