@@ -12,7 +12,7 @@ import (
 	"github.com/lemonwx/go-canal/binlog"
 	"github.com/lemonwx/go-canal/event"
 	"github.com/lemonwx/go-canal/server"
-	"github.com/lemonwx/go-canal/sync"
+	"github.com/lemonwx/go-canal/syncer"
 	"github.com/lemonwx/log"
 )
 
@@ -32,24 +32,27 @@ var (
 	eveBufSize uint32           = 100
 	ch         chan event.Event = make(chan event.Event, eveBufSize)
 	pos        binlog.Pos       = binlog.Pos{"mysql-bin.000001", 4}
+	s          syncer.Syncer
 )
 
 func setupJsonSyncer() {
-	syncer, err := sync.NewJsonSyncerFromLocalFile("mysql-bin.000001")
+
+	jsonSyncer, err := syncer.NewJsonSyncerFromLocalFile("mysql-bin.000001")
 	if err != nil {
 		log.Errorf("load binlog from json failed: %v", errors.ErrorStack(err))
 		panic(err)
 	}
 
-	syncer.SetupChan(ch)
-	pos = syncer.CurPos
+	jsonSyncer.SetupChan(ch)
+	pos = jsonSyncer.CurPos
 
-	if err = syncer.RemoveBinlogGtNow(pos.FileName); err != nil {
+	if err = jsonSyncer.RemoveBinlogGtNow(pos.FileName); err != nil {
 		log.Errorf("rm binlog gt now failed: %v", errors.ErrorStack(err))
 		panic(err)
 	}
 
-	go syncer.Start()
+	go jsonSyncer.Start()
+	s = jsonSyncer
 
 }
 
@@ -62,7 +65,7 @@ func setupBinlogLis() {
 }
 
 func setupSvr() {
-	svr, err := server.NewServer(svrHost, svrPort)
+	svr, err := server.NewServer(svrHost, svrPort, s)
 	if err != nil {
 		log.Errorf("New Server failed:%v", err)
 		panic(err)

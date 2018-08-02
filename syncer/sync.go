@@ -11,4 +11,6 @@ import (
 
 type Syncer interface {
 	Sync(event event.Event) error
+	Rollback(arg *RollbackArg) error
+	Get(arg *RollbackArg) ([]event.Event, error)
 }

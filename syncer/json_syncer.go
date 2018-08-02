@@ -167,10 +167,6 @@ func (syncer *JsonSyncer) GetByPk(schema, table string, field string, val []byte
 
 }
 
-func (syncer *JsonSyncer) Rollback(cmd string) {
-
-}
-
 func NewJsonSyncerFromLocalFile(startFile string) (*JsonSyncer, error) {
 	js := &JsonSyncer{
 		streamer: &BinlogStreamer{
