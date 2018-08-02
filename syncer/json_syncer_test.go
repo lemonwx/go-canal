@@ -3,7 +3,7 @@
  *  data  : 18-7-30 下午11:28
  */
 
-package sync
+package syncer
 
 import (
 	"testing"

@@ -3,7 +3,7 @@
  *  data  : 18-7-25 下午8:22
  */
 
-package sync
+package syncer
 
 import (
 	"encoding/json"
@@ -164,6 +164,10 @@ func (syncer *JsonSyncer) LoadFromJson() error {
 
 func (syncer *JsonSyncer) GetByPk(schema, table string, field string, val []byte) {
 	// db.tb.id=1 根据这些信息得到一个 row event, 再由业务侧决定 回滚 还是 其他用途
+
+}
+
+func (syncer *JsonSyncer) Rollback(cmd string) {
 
 }
 
