@@ -110,6 +110,10 @@ func (s *Server) chkArgs(args [][]byte) (*syncer.RollbackArg, error) {
 		}
 	}
 
+	if !arg.Ts.Before(arg.Te) {
+		return nil, fmt.Errorf("time start must less than end")
+	}
+
 	return arg, nil
 }
 

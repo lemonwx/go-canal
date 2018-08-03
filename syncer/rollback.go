@@ -26,8 +26,8 @@ type RollbackArg struct {
 	Schema string
 	Table  string
 	Fields []*Field
-	Ts     time.Time
-	Te     time.Time
+	Ts     time.Time // if current event beforr than Ts 则已经完整过滤到了可能的 binlog, 停止扫描
+	Te     time.Time // if last event after than Te 则当前已经同步到了需要的 binlog
 }
 
 func (arg *RollbackArg) String() string {
@@ -36,9 +36,29 @@ func (arg *RollbackArg) String() string {
 
 func (syncer *JsonSyncer) Get(arg *RollbackArg) ([]event.Event, error) {
 	startIdx := len(syncer.streamer.Events) - 1
+	startEve := syncer.streamer.Events[startIdx]
+	startEveTs := event.GetEventTime(startEve)
+	log.Debugf("now sync to %s", startEveTs)
+
+	if startEveTs.Before(arg.Te) {
+		return nil, fmt.Errorf("startEvt's time: %s before than arg.Te: %s, "+
+			"has not sync the binlog needed by this command", startEveTs, arg.Te)
+	}
+
+	log.Debugf("start: %s", event.GetEventTime(syncer.streamer.Events[startIdx]))
+	log.Debugf("end  : %s", event.GetEventTime(syncer.streamer.Events[1]))
+
 	events := make([]event.Event, 0, 10)
 	for idx := startIdx; idx >= 0; idx -= 1 {
-		events = append(events, syncer.streamer.Events[idx])
+		eve := syncer.streamer.Events[idx]
+		curTs := event.GetEventTime(eve)
+
+		if curTs.Before(arg.Ts) {
+			log.Debugf("get %d events, scan finish !!!", len(events))
+			return events, nil
+		}
+
+		events = append(events, eve)
 	}
 
 	return events, nil
@@ -47,11 +67,13 @@ func (syncer *JsonSyncer) Get(arg *RollbackArg) ([]event.Event, error) {
 func (syncer *JsonSyncer) Rollback(arg *RollbackArg) error {
 	eves, err := syncer.Get(arg)
 	if err != nil {
+		log.Debug(err)
 		return err
 	}
 
 	for _, eve := range eves {
-		log.Debug(eve.Dump())
+		t := event.GetEventTime(eve)
+		log.Debugf("%d:%d:%d-%s", t.Hour(), t.Minute(), t.Second(), eve.Dump())
 	}
 
 	return nil
