@@ -7,6 +7,8 @@ package syncer
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/lemonwx/go-canal/event"
 	"github.com/lemonwx/log"
 )
@@ -24,6 +26,8 @@ type RollbackArg struct {
 	Schema string
 	Table  string
 	Fields []*Field
+	Ts     time.Time
+	Te     time.Time
 }
 
 func (arg *RollbackArg) String() string {

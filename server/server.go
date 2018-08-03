@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/lemonwx/go-canal/syncer"
 )
@@ -73,12 +74,12 @@ func (s *Server) chkArgs(args [][]byte) (*syncer.RollbackArg, error) {
 
 	arg := &syncer.RollbackArg{}
 
-	if len(args) != 3 {
-		return nil, fmt.Errorf("args size must be 3")
+	if len(args) != 5 {
+		return nil, fmt.Errorf("args size must be 5")
 	}
 
 	pointIdx := bytes.Index(args[0], []byte("."))
-	if pointIdx == -1 {
+	if pointIdx == -1 || pointIdx+1 >= len(args[0]) {
 		return nil, fmt.Errorf("first args must be scheam.table")
 	}
 	arg.Schema = string(args[0][:pointIdx])
@@ -86,7 +87,7 @@ func (s *Server) chkArgs(args [][]byte) (*syncer.RollbackArg, error) {
 
 	for idx := 1; idx <= 2; idx += 1 {
 		equalIdx := bytes.Index(args[idx], []byte("="))
-		if equalIdx == -1 {
+		if equalIdx == -1 || equalIdx+1 >= len(args[idx]) {
 			return nil, fmt.Errorf("field args must be field=val")
 		}
 		field := &syncer.Field{}
@@ -94,6 +95,21 @@ func (s *Server) chkArgs(args [][]byte) (*syncer.RollbackArg, error) {
 		field.Val = string(args[idx][equalIdx+1:])
 		arg.Fields = append(arg.Fields, field)
 	}
+
+	for idx := 3; idx < 5; idx += 1 {
+		timeStr := string(args[idx])
+		t, err := time.Parse("2006-01-02 15:04:05", timeStr)
+		if err != nil {
+			return nil, fmt.Errorf("parse str:%s to time failed: %v", timeStr, err)
+		}
+
+		if idx == 3 {
+			arg.Ts = t
+		} else {
+			arg.Te = t
+		}
+	}
+
 	return arg, nil
 }
 
