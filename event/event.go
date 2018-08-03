@@ -97,6 +97,31 @@ func GetEventType(eve Event) uint8 {
 	return 0
 }
 
+func GetEventTime(eve Event) time.Time {
+	var ts uint32
+	switch e := eve.(type) {
+	case *GtidEvent:
+		ts = e.Header.Ts
+	case *XidEvnet:
+		ts = e.Header.Ts
+	case *QueryEvent:
+		ts = e.Header.Ts
+	case *FormatDescEvent:
+		ts = e.Header.Ts
+	case *PreGtidLogEvent:
+		ts = e.Header.Ts
+	case *RotateEvent:
+		ts = e.Header.Ts
+	case *RowsEvent:
+		ts = e.Header.Ts
+	case *TableMapEvent:
+		ts = e.Header.Ts
+	case *StopEvent:
+		ts = e.Header.Ts
+	}
+	return time.Unix(int64(ts), 0).UTC().Add(time.Hour * 8)
+}
+
 type GtidEvent struct {
 	Header     *EveHeader
 	commitFlag bool
