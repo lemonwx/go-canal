@@ -7,6 +7,7 @@ package syncer
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/lemonwx/go-canal/event"
@@ -49,18 +50,45 @@ func (syncer *JsonSyncer) Get(arg *RollbackArg) ([]event.Event, error) {
 	log.Debugf("end  : %s", event.GetEventTime(syncer.streamer.Events[1]))
 
 	events := make([]event.Event, 0, 10)
+	getTrx := false
+	v := arg.Fields[0]
+
 	for idx := startIdx; idx >= 0; idx -= 1 {
 		eve := syncer.streamer.Events[idx]
 		curTs := event.GetEventTime(eve)
+
+		if curTs.After(arg.Te) {
+			continue
+		}
 
 		if curTs.Before(arg.Ts) {
 			log.Debugf("get %d events, scan finish !!!", len(events))
 			return events, nil
 		}
 
+		if e, ok := eve.(*event.RowsEvent); ok {
+			if string(e.Table.Table) == arg.Table && string(e.Table.Schema) == arg.Schema {
+				for _, row := range e.Rows {
+					if strconv.FormatUint(row[0].(uint64), 10) == v.Val {
+						getTrx = true
+					}
+				}
+			}
+		}
+		if _, ok := eve.(*event.GtidEvent); ok {
+			if getTrx {
+				events = append(events, eve)
+				log.Debug("get trx and get gtid event finish, break")
+				break
+			} else {
+				// now grep an complete trx, but any row equal with args,
+				//     so clear the slice and expect next trx will be matched
+				log.Debugf("scan an complete trx, but rows not equal, so clear and continue")
+				events = events[:0]
+			}
+		}
 		events = append(events, eve)
 	}
-
 	return events, nil
 }
 

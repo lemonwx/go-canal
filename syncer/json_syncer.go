@@ -179,6 +179,7 @@ func NewJsonSyncerFromLocalFile(startFile string) (*JsonSyncer, error) {
 		log.Debugf("parse binlog from %s", fileName)
 		data, err := ioutil.ReadFile(event.BASE_BINLOG_PATH + fileName)
 		if err != nil {
+			log.Debugf("read file: %v failed, return", fileName)
 			break
 		}
 
@@ -224,11 +225,11 @@ func (syncer *JsonSyncer) RemoveBinlogGtNow(filename string) error {
 	}
 
 	for _, f := range fs {
-		log.Debug(f.Name() >= filename)
 		if f.Name() >= filename {
 			if err = os.Remove(event.BASE_BINLOG_PATH + f.Name()); err != nil {
 				return errors.Trace(err)
 			}
+			log.Debugf("rm file: %v success", f.Name())
 		}
 	}
 
