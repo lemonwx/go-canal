@@ -49,6 +49,11 @@ type JsonSyncer struct {
 
 	curWriter io.Writer
 	CurPos    binlog.Pos
+
+	Host     string
+	Port     int
+	User     string
+	Password string
 }
 
 func NewFileWriter(fileName string) (io.Writer, error) {

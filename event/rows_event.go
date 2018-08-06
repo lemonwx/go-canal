@@ -164,10 +164,12 @@ func (re *RowsEvent) rollbackForIst(fields []string) ([]string, error) {
 	rbTrxSqls := []string{}
 	for _, row := range re.Rows {
 		wheres := []string{}
-		for idx, fieldVal := range row {
-			wheres = append(wheres, fmt.Sprintf("%s=%v", fields[idx], fieldVal))
+
+		for idx, fieldName := range fields {
+			fieldVal := row[idx]
+			wheres = append(wheres, fmt.Sprintf("%s=%v", fieldName, fieldVal))
 		}
-		rbSql := fmt.Sprintf("delete from %s %s", re.Table.FullName, strings.Join(wheres, ", "))
+		rbSql := fmt.Sprintf("delete from %s where %s", re.Table.FullName, strings.Join(wheres, ", "))
 		rbTrxSqls = append(rbTrxSqls, rbSql)
 	}
 	return rbTrxSqls, nil
@@ -178,11 +180,13 @@ func (re *RowsEvent) rollbackForDel(fields []string) ([]string, error) {
 	for _, row := range re.Rows {
 		values := []string{}
 		fieldNames := []string{}
-		for idx, fieldVal := range row {
-			values = append(values, fmt.Sprintf("%v", fieldVal))
-			fieldNames = append(fieldNames, fields[idx])
 
+		for idx, fieldName := range fields {
+			fieldVal := row[idx]
+			values = append(values, fmt.Sprintf("%v", fieldVal))
+			fieldNames = append(fieldNames, fieldName)
 		}
+
 		rbSql := fmt.Sprintf("insert into %s (%s) values (%s)", re.Table.FullName,
 			strings.Join(fieldNames, ", "),
 			strings.Join(values, ", "))
@@ -196,8 +200,8 @@ func (re *RowsEvent) rollbackForUpdate() ([]string, error) {
 }
 
 func (re *RowsEvent) RollBack(fields []string) ([]string, error) {
-	if uint64(len(fields)) != re.fieldSize {
-		return nil, errors.New("params fields size must equal event.FieldSize")
+	if uint64(len(fields)) > re.fieldSize {
+		return nil, errors.New("params fields size must <= event.FieldSize")
 	}
 	switch re.Header.EveType {
 	case WRITE_ROWS_EVENT_V2:

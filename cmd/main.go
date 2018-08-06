@@ -16,7 +16,7 @@ import (
 	"github.com/lemonwx/log"
 )
 
-const (
+var (
 	host     string = "172.17.0.2"
 	port     int    = 5518
 	user     string = "root"
@@ -50,6 +50,11 @@ func setupJsonSyncer() {
 		log.Errorf("rm binlog gt now failed: %v", errors.ErrorStack(err))
 		panic(err)
 	}
+
+	jsonSyncer.Host = host
+	jsonSyncer.User = user
+	jsonSyncer.Password = password
+	jsonSyncer.Port = port
 
 	go jsonSyncer.Start()
 	s = jsonSyncer

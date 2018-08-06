@@ -6,12 +6,18 @@
 package syncer
 
 import (
+	"database/sql"
 	"fmt"
 	"strconv"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/lemonwx/go-canal/event"
 	"github.com/lemonwx/log"
+)
+
+var (
+	db *sql.DB
 )
 
 type Field struct {
@@ -92,6 +98,43 @@ func (syncer *JsonSyncer) Get(arg *RollbackArg) ([]event.Event, error) {
 	return events, nil
 }
 
+func (syncer *JsonSyncer) initDB() error {
+	var err error
+	db, err = sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%d)/",
+		syncer.User, syncer.Password, syncer.Host, syncer.Port))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (syncer *JsonSyncer) getFieldName(schema, table string) ([]string, error) {
+	if db == nil {
+		err := syncer.initDB()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	rows, err := db.Query("select column_name from information_schema.columns where "+
+		"table_schema=? and table_name=?", schema, table)
+	if err != nil {
+		return nil, err
+	}
+
+	cols := make([]string, 0, 8)
+	for rows.Next() {
+		col := ""
+		err := rows.Scan(&col)
+		if err != nil {
+			return nil, err
+		}
+		cols = append(cols, col)
+	}
+
+	return cols, nil
+}
+
 func (syncer *JsonSyncer) Rollback(arg *RollbackArg) error {
 	eves, err := syncer.Get(arg)
 	if err != nil {
@@ -104,11 +147,6 @@ func (syncer *JsonSyncer) Rollback(arg *RollbackArg) error {
 	}
 
 	size := len(eves)
-
-	for _, eve := range eves {
-		log.Debug(eve.Dump())
-	}
-
 	if _, ok := eves[0].(*event.XidEvnet); !ok {
 		return fmt.Errorf("scan first event must be XidEvent, but get: %v", eves[0].Dump())
 	}
@@ -116,9 +154,25 @@ func (syncer *JsonSyncer) Rollback(arg *RollbackArg) error {
 		return fmt.Errorf("scan last event must be GtidEvent, but get: %v", eves[size-1].Dump())
 	}
 
+	fieldsMap := map[uint64][]string{}
+
 	for _, eve := range eves {
 		if e, ok := eve.(*event.RowsEvent); ok {
-			log.Debug(e.RollBack([]string{"version", "id", "name"}))
+			cols := []string{}
+			ok := false
+			cols, ok = fieldsMap[e.TblId]
+
+			if !ok {
+				var err error
+				cols, err = syncer.getFieldName(string(e.Table.Schema), string(e.Table.Table))
+				if err != nil {
+					return err
+				}
+				fieldsMap[e.TblId] = cols
+			}
+
+			//log.Debug(e.RollBack(cols))
+			log.Debug(e.RollBack([]string{"version"}))
 		}
 	}
 	return nil
