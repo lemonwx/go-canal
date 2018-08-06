@@ -155,6 +155,7 @@ func (syncer *JsonSyncer) Rollback(arg *RollbackArg) error {
 	}
 
 	fieldsMap := map[uint64][]string{}
+	stmts := []*stmt{}
 
 	for _, eve := range eves {
 		if e, ok := eve.(*event.RowsEvent); ok {
@@ -171,9 +172,61 @@ func (syncer *JsonSyncer) Rollback(arg *RollbackArg) error {
 				fieldsMap[e.TblId] = cols
 			}
 
-			//log.Debug(e.RollBack(cols))
-			log.Debug(e.RollBack([]string{"version"}))
+			log.Debug(e.RollBack(cols))
+			sql, vals, err := e.RollBack(cols)
+			if err != nil {
+				return err
+			}
+
+			s := &stmt{sql, vals}
+			stmts = append(stmts, s)
 		}
 	}
+
+	if len(stmts) != 0 {
+		syncer.execute(stmts)
+	} else {
+		return fmt.Errorf("general %s sqls to execute", len(stmts))
+	}
 	return nil
+}
+
+type stmt struct {
+	sql  string
+	vals [][]interface{}
+}
+
+func (syncer *JsonSyncer) execute(stmts []*stmt) error {
+	if db == nil {
+		err := syncer.initDB()
+		if err != nil {
+			return err
+		}
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+
+	for _, stmt := range stmts {
+		log.Debug(stmt.sql, stmt.vals)
+		s, err := tx.Prepare(stmt.sql)
+		log.Debug(s, err)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		for _, val := range stmt.vals {
+			_, err := s.Exec(val...)
+			log.Debug(err)
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+	}
+
+	return tx.Commit()
 }

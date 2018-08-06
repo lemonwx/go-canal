@@ -160,48 +160,59 @@ func (re *RowsEvent) ReadRows(data []byte) {
 	}
 }
 
-func (re *RowsEvent) rollbackForIst(fields []string) ([]string, error) {
-	rbTrxSqls := []string{}
+func (re *RowsEvent) rollbackForIst(fields []string) (string, [][]interface{}, error) {
+	vals := [][]interface{}{}
+	rbSql := ""
+
 	for _, row := range re.Rows {
 		wheres := []string{}
 
+		fieldVals := []interface{}{}
 		for idx, fieldName := range fields {
-			fieldVal := row[idx]
-			wheres = append(wheres, fmt.Sprintf("%s=%v", fieldName, fieldVal))
+			fieldVals = append(fieldVals, row[idx])
+			wheres = append(wheres, fmt.Sprintf("%s=?", fieldName))
 		}
-		rbSql := fmt.Sprintf("delete from %s where %s", re.Table.FullName, strings.Join(wheres, ", "))
-		rbTrxSqls = append(rbTrxSqls, rbSql)
+		if rbSql == "" {
+			rbSql = fmt.Sprintf("delete from %s where %s", re.Table.FullName, strings.Join(wheres, " and "))
+		}
+		vals = append(vals, fieldVals)
 	}
-	return rbTrxSqls, nil
+
+	return rbSql, vals, nil
 }
 
-func (re *RowsEvent) rollbackForDel(fields []string) ([]string, error) {
-	rbTrxSqls := []string{}
+func (re *RowsEvent) rollbackForDel(fields []string) (string, [][]interface{}, error) {
+	rbSql := ""
+	vals := [][]interface{}{}
 	for _, row := range re.Rows {
-		values := []string{}
+		values := []interface{}{}
 		fieldNames := []string{}
+		valspace := []string{}
 
 		for idx, fieldName := range fields {
-			fieldVal := row[idx]
-			values = append(values, fmt.Sprintf("%v", fieldVal))
+			values = append(values, row[idx])
 			fieldNames = append(fieldNames, fieldName)
+			valspace = append(valspace, "?")
 		}
+		vals = append(vals, values)
 
-		rbSql := fmt.Sprintf("insert into %s (%s) values (%s)", re.Table.FullName,
-			strings.Join(fieldNames, ", "),
-			strings.Join(values, ", "))
-		rbTrxSqls = append(rbTrxSqls, rbSql)
+		if rbSql == "" {
+			rbSql = fmt.Sprintf("insert into %s (%s) values (%s)", re.Table.FullName,
+				strings.Join(fieldNames, ", "),
+				strings.Join(valspace, ", "),
+			)
+		}
 	}
-	return rbTrxSqls, nil
+	return rbSql, vals, nil
 }
 
-func (re *RowsEvent) rollbackForUpdate() ([]string, error) {
-	return nil, nil
+func (re *RowsEvent) rollbackForUpdate() (string, [][]interface{}, error) {
+	return "", nil, nil
 }
 
-func (re *RowsEvent) RollBack(fields []string) ([]string, error) {
+func (re *RowsEvent) RollBack(fields []string) (string, [][]interface{}, error) {
 	if uint64(len(fields)) > re.fieldSize {
-		return nil, errors.New("params fields size must <= event.FieldSize")
+		return "", nil, errors.New("params fields size must <= event.FieldSize")
 	}
 	switch re.Header.EveType {
 	case WRITE_ROWS_EVENT_V2:
@@ -209,7 +220,7 @@ func (re *RowsEvent) RollBack(fields []string) ([]string, error) {
 	case DELETE_ROWS_EVENT_V2:
 		return re.rollbackForDel(fields)
 	default:
-		return nil, errors.New("UNSUPPORTED ROLLBACK BINLOG EVENT")
+		return "", nil, errors.New("UNSUPPORTED ROLLBACK BINLOG EVENT")
 	}
 }
 

@@ -182,15 +182,6 @@ func (listener *Listener) parseEvent(header *event.EveHeader, data []byte) (even
 		for _, field := range table.fields {
 			fieldNames = append(fieldNames, field.fieldName)
 		}
-
-		if rbSqls, err := re.RollBack(fieldNames); err != nil {
-			log.Errorf("re: %v rollback failed: %v", re, err)
-		} else {
-			log.Debug("ROLLBACK: ")
-			for _, sql := range rbSqls {
-				log.Debug(sql)
-			}
-		}
 	}
 
 	if _, ok := eve.(*event.QueryEvent); ok {
