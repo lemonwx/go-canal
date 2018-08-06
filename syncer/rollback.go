@@ -75,9 +75,10 @@ func (syncer *JsonSyncer) Get(arg *RollbackArg) ([]event.Event, error) {
 				}
 			}
 		}
+		events = append(events, eve)
+
 		if _, ok := eve.(*event.GtidEvent); ok {
 			if getTrx {
-				events = append(events, eve)
 				log.Debug("get trx and get gtid event finish, break")
 				break
 			} else {
@@ -87,7 +88,6 @@ func (syncer *JsonSyncer) Get(arg *RollbackArg) ([]event.Event, error) {
 				events = events[:0]
 			}
 		}
-		events = append(events, eve)
 	}
 	return events, nil
 }
@@ -99,10 +99,27 @@ func (syncer *JsonSyncer) Rollback(arg *RollbackArg) error {
 		return err
 	}
 
-	for _, eve := range eves {
-		t := event.GetEventTime(eve)
-		log.Debugf("%d:%d:%d-%s", t.Hour(), t.Minute(), t.Second(), eve.Dump())
+	if len(eves) == 0 {
+		return fmt.Errorf("no events to rollback")
 	}
 
+	size := len(eves)
+
+	for _, eve := range eves {
+		log.Debug(eve.Dump())
+	}
+
+	if _, ok := eves[0].(*event.XidEvnet); !ok {
+		return fmt.Errorf("scan first event must be XidEvent, but get: %v", eves[0].Dump())
+	}
+	if _, ok := eves[size-1].(*event.GtidEvent); !ok {
+		return fmt.Errorf("scan last event must be GtidEvent, but get: %v", eves[size-1].Dump())
+	}
+
+	for _, eve := range eves {
+		if e, ok := eve.(*event.RowsEvent); ok {
+			log.Debug(e.RollBack([]string{"version", "id", "name"}))
+		}
+	}
 	return nil
 }

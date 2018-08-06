@@ -118,8 +118,9 @@ func (s *Server) chkArgs(args [][]byte) (*syncer.RollbackArg, error) {
 }
 
 func (s *Server) handleRequest(request *Request) Reply {
-
-	arg, err := s.chkArgs(request.Arguments)
+	var err error
+	var arg *syncer.RollbackArg
+	arg, err = s.chkArgs(request.Arguments)
 	if err != nil {
 		return &ErrorReply{message: err.Error()}
 	}
@@ -128,11 +129,14 @@ func (s *Server) handleRequest(request *Request) Reply {
 	case "GET":
 		s.syncer.Get(arg)
 	case "ROLLBACK":
-		s.syncer.Rollback(arg)
+		err = s.syncer.Rollback(arg)
 	default:
 		return &ErrorReply{message: "unsupported command"}
 	}
 
+	if err != nil {
+		return &ErrorReply{message: err.Error()}
+	}
 	return &StatusReply{
 		code: "OK",
 	}
